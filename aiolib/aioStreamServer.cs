@@ -15,31 +15,49 @@ namespace aiolib
 {
     public static class aioExtensions
     {
+        public static void Clear(this byte[] array)
+        {
+            Array.Clear(array, 0, array.Length);
+            array = null;
+        }
+
         public static async Task<string> GetClientDigest(this RemoteClient client)
         {
             SHA1 sha1 = SHA1.Create();
+            string digest = String.Empty;
 
             IPEndPoint remoteEnd = (IPEndPoint)client.ClientSocket.Client.RemoteEndPoint;
             IPEndPoint localEnd = (IPEndPoint)client.ClientSocket.Client.LocalEndPoint;
 
             byte[] localbytes = Encoding.UTF8.GetBytes(localEnd.ToString());
-            Stream localstream = new MemoryStream(localbytes);
-            byte[] localHash = await sha1.ComputeHashAsync(localstream);
-
             byte[] remotebytes = Encoding.UTF8.GetBytes(remoteEnd.ToString());
-            Stream remotestream = new MemoryStream(remotebytes);
-            byte[] remoteHash = await sha1.ComputeHashAsync(remotestream);
 
-            //byte[] bothbytes = (byte[])localbytes.Concat(remotebytes);
+            using (MemoryStream localstream = new MemoryStream(localbytes))
+            {
+                using (MemoryStream remotestream = new MemoryStream(remotebytes))
+                {
+                    byte[] localHash = await sha1.ComputeHashAsync(localstream);
+                    byte[] remoteHash = await sha1.ComputeHashAsync(remotestream);
 
-            byte[] bothbytes = new byte[localbytes.Length + remotebytes.Length];
-            Buffer.BlockCopy(localbytes, 0, bothbytes, 0, localbytes.Length);
-            Buffer.BlockCopy(remotebytes, 0, bothbytes, localbytes.Length, remotebytes.Length);
+                    byte[] bothHash = new byte[localHash.Length + remoteHash.Length];
 
-            Stream bothstream = new MemoryStream(bothbytes);
-            byte[] digest = await sha1.ComputeHashAsync(bothstream);
+                    Buffer.BlockCopy(localHash, 0, bothHash, 0, localHash.Length);
+                    Buffer.BlockCopy(remoteHash, 0, bothHash, localHash.Length, remoteHash.Length);
 
-            return Convert.ToHexString(digest);
+                    using (MemoryStream bothstream = new MemoryStream(bothHash))
+                    {
+                        byte[] hex = await sha1.ComputeHashAsync(bothstream);
+
+                        localbytes.Clear();
+                        remotebytes.Clear();
+                        localHash.Clear();
+                        remoteHash.Clear(); 
+                        bothHash.Clear(); 
+                        digest = Convert.ToHexString(hex);
+                    }                    
+                }
+            }
+            return digest;
         }
     }
 
@@ -53,7 +71,10 @@ namespace aiolib
         /// Used in-case outside insertions or deletions to the ConnectedClients need to be made. If so, please respect the lock.
         public bool ConnectedClientsLock = false;
         //public Authorization auth;
-        public bool ignoreHandshake = true;
+        /// <summary>
+        /// Set to falseif you only want clients who follow our specific handshake to connect.
+        /// </summary>
+        public bool ignoreHandshake { get; set; }
         public List<IPAddress> Blacklist { get ;}
         public ClientEvents ClientEventsPublisher { get; }
         public ServerEvents ServerEventsPublusher { get; }
@@ -67,7 +88,7 @@ namespace aiolib
 #pragma warning restore CS8618 // Complains that it must be Non-Nullable when i make it nullable, or complains that It must be Nullable when I make it Non-Nullable.
         {
 
-            //auth.
+            ignoreHandshake = true; 
             Blacklist = new List<IPAddress>();
             ConnectedClients = new ObservableCollection<RemoteClient>();
             ClientEventsPublisher = new ClientEvents();
