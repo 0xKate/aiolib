@@ -1,8 +1,10 @@
-﻿using System;
+﻿using aiolib;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+
 #pragma warning disable CS8618 // The IDE is being really weird about this entire .cs file, it works, and also did not display errors in older versions of .NET
-namespace aioStreamServerLib
+namespace aiolib
 {
     // Not quite sure how to inherit this and overwrite the constructor with additional properties.
     public abstract class BaseEvent

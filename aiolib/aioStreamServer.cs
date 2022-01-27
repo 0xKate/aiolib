@@ -8,16 +8,20 @@ using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
-using aioStreamServerLib;
 
 namespace aiolib
 {
     public class aioStreamServer
     {
-        // List to keep track of connected clients.
-
+        /// List to keep track of connected clients.
+        /// Note: To obvserve this from WPF, while the server is in a background thread, use the following line of code from the observing thread.
+        /// private object lockObject = new object(); // Note
+        /// BindingOperations.EnableCollectionSynchronization(StreamServer.ConnectedClients, lockObject);
         public ObservableCollection<RemoteClient> ConnectedClients { get; }
+        /// Used in-case outside insertions or deletions to the ConnectedClients need to be made. If so, please respect the lock.
+        public bool ConnectedClientsLock = false;
         public ClientEvents ClientEventsPublisher { get; }
+        public ServerEvents ServerEventsPublusher { get; }
         public bool ServerRunning { get; set; }
         private int Port { get; }
         private IPAddress IpAddress { get; }
@@ -28,9 +32,9 @@ namespace aiolib
         public aioStreamServer(int listenPort, IPAddress listenAddress)//, string certificate_loc) // SSL
 #pragma warning restore CS8618 // Complains that it must be Non-Nullable when i make it nullable, or complains that It must be Nullable when I make it Non-Nullable.
         {
-
             ConnectedClients = new ObservableCollection<RemoteClient>();
             ClientEventsPublisher = new ClientEvents();
+            ServerEventsPublusher = new ServerEvents();
             ServerRunning = true;
             Port = listenPort;
             IpAddress = listenAddress;
@@ -38,18 +42,21 @@ namespace aiolib
             ListenTokenSource = new CancellationTokenSource();
             ListenToken = ListenTokenSource.Token;
 
+            //ServerEventsPublusher.initialized.Raise(this);
+
             // SSL
             //serverCertificate = X509Certificate.CreateFromCertFile(certificate_loc);
         }
 
         // Coroutine
-        public async void Run()
+        public async Task Run()
         {
             //High level C# api for creating socket server.
             TcpListener listener = new TcpListener(IpAddress, Port);
             listener.Start();
             ServerRunning = true;
 
+            //ServerEventsPublusher.listening.Raise("Listener", );
             // This loop is running asyncronously, it will await for new clients. The thread may do other things while awaiting.
             while (ServerRunning)
             {
@@ -61,7 +68,9 @@ namespace aiolib
                     RemoteClient remoteClient = new RemoteClient(tcpClient);
                     //LastClient = remoteClient;
 
+                    ConnectedClientsLock = true;
                     ConnectedClients.Add(remoteClient);
+                    ConnectedClientsLock = false;
 
                     // SSL ToDO: Upgrade to SSL here. Implement another function between HandleClient and this loop to authenticate the client first via a handshake. Once we know we are talking
                     // To our application and not something else then upgrade the network stream to SSL and handle the client.
@@ -171,9 +180,11 @@ namespace aiolib
                 // Raise a disconnect event.
                 ClientEventsPublisher.disconnectEvent.Raise(remoteClient);
                 // Cleanup the handles and resources now that we are done with them.                
-                
+
                 // Remove the client from the connected clents list.
+                ConnectedClientsLock = true;
                 _ = ConnectedClients.Remove(remoteClient);
+                ConnectedClientsLock = false;
 
                 Console.WriteLine($"Number of Clients: {ConnectedClients.Count}");
 

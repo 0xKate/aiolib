@@ -3,21 +3,35 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 
-namespace aioStreamServerLib
+namespace aiolib
 {
+    /// A TcpClient wrapper, this is essentially how the server sees and interacts with its clients.
     public class RemoteClient : IDisposable
     {
+        /// A reference to the underlying TcpSocket. Use Higher level methods for sending/receiving if possible.
         public TcpClient ClientSocket { get; }
+        /// The remote EndPoint. Can be converted to string to represent the remote connection as  <IP>:<port>.
         public EndPoint RemoteEndPoint { get; }
+        /// A reference to the underlying NetworkStream, one level higher than TcpClient, this is a byte stream.
         public NetworkStream Stream { get; }
         //public NetworkStream sslStream { get; }
+        /// A reference to the StreamWriter. This is a string based stream that handles the auto-conversion between strings, bytes, and network transport.
         public StreamWriter Writer { get; }
+        /// A reference to the StreamReader. This is a string based stream that handles the auto-conversion between strings, bytes, and network transport.
         public StreamReader Reader { get; }
+        /// Used internally to cancel the await on the StreamReader to more gracefully terminate clients.
         public CancellationTokenSource ReaderTokenSource { get; }
+        /// Child token passed to the await StreamReader.Read instide the receive loop.
         public CancellationToken ReaderToken { get; }
+        /// Set to false to cancel the receive loop for this client.
         public bool Reading { get; set; }
         private bool _disposed = false;
         private bool _closed = false;
+        /// <summary>
+        /// A container/wrapper for TcpClient and multiple handles to Unmanaged resources. As well as high level functions for interacting with the remote client and data stream.
+        /// </summary>
+        /// <param name="tcpClient">Pass the TcpClient obtained by the TcpListener.AcceptAsync to this to wrap it as a RemoteClient.</param>
+        /// <exception cref="ApplicationException"> Will throw an exception if we fail to obtain the EndPoint from the TcpClient.</exception>
         public RemoteClient(TcpClient tcpClient)
         {
             ClientSocket = tcpClient;
@@ -47,15 +61,32 @@ namespace aioStreamServerLib
             // AutoFlush causes the streamWritter buffer to instantly flush, instead of waiting for a manual flush.
             Writer.AutoFlush = true;
         }
+        /// <summary>
+        /// Used internally or when an sending the data back from an asyncronous enviroment.
+        /// </summary>
+        /// <param name="data">A string of data to send to the remote end of the connection.</param>
+        /// <returns>An awaitable Task</returns>
         public async Task SendDataAsync(string data)
         {
             // Write the data to the socket (remote client), but do so in an asyncronous manner so other tasks may run while the client receives it.
             await Writer.WriteLineAsync(data);
         }
+        /// <summary>
+        /// The recomended method for sending data to the client. A fire-and-forget method that Can be used from any enviroment.
+        /// </summary>
+        /// <param name="message"></param>
         public void SendData(string message)
         {
             Task SendTask = SendDataAsync(message);
         }
+        /// Returns the <IP>:<Port> of the remote client in string format. --
+        public override string ToString()
+        {
+            return this.RemoteEndPoint.ToString();
+        }
+        /// <summary>
+        /// Close the connection and start to close all handles to assosicated resources.
+        /// </summary>
         public void Close()
         {
             if (_closed)
@@ -71,6 +102,10 @@ namespace aioStreamServerLib
             ClientSocket.Close();
             _closed = true;
         }
+        /// <summary>
+        ///  Used internally.
+        /// </summary>
+        /// <param name="disposing"></param>
         protected virtual void Dispose(bool disposing)
         {
             if (_disposed)
@@ -87,6 +122,9 @@ namespace aioStreamServerLib
             ClientSocket.Dispose();
             _disposed = true;
         }
+        /// <summary>
+        /// Release all remaining resources for garbage collection.
+        /// </summary>
         public void Dispose()
         {
             Dispose(true);

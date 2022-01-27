@@ -1,7 +1,6 @@
-﻿using aiolib;
-using aioStreamServerLib;
-using System;
+﻿using System;
 using System.Net;
+using aiolib;
 
 namespace StreamServerAsync
 {
@@ -27,6 +26,7 @@ namespace StreamServerAsync
         static void OnConnectCallback(object sender, ClientEvents.ConnectEvent.ConnectArgs eventArgs)
         {
             Console.WriteLine($"Client {eventArgs.Client.RemoteEndPoint} has connected.");
+            
         }
         static void OnDisconnectCallback(object sender, ClientEvents.DisconnectEvent.DisconnectArgs eventArgs)
         {
@@ -35,6 +35,13 @@ namespace StreamServerAsync
         static void OnReceiveCallback(object sender, ClientEvents.ReceiveEvent.ReceiveEventArgs eventArgs)
         {
             Console.WriteLine($"Client {eventArgs.Client.RemoteEndPoint} has sent data: {eventArgs.Payload}");
+            string requestHeader = ":GETQUEST:";
+            if (eventArgs.Payload.StartsWith(requestHeader))
+            {
+                var requestData = eventArgs.Payload.Substring(requestHeader.Length);
+                Console.WriteLine("Received Quest Request.");
+                eventArgs.Client.SendData(":QUESTDATA:<ArbitraryData>");
+            }            
         }
         static void OnExceptionCallback(object sender, ClientEvents.ExceptionEvent.ExceptionEventArgs eventArgs)
         {

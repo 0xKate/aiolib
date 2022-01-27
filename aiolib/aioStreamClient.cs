@@ -7,7 +7,7 @@ using System.Net.Sockets;
 using System.Threading.Tasks;
 
 
-namespace StreamClientAsync
+namespace aiolib
 {
     public class ReceiveEventArgs : EventArgs
     {
