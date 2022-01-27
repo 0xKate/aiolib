@@ -11,7 +11,7 @@ namespace aiolib
         /// A reference to the underlying TcpSocket. Use Higher level methods for sending/receiving if possible.
         public TcpClient ClientSocket { get; }
         /// The remote EndPoint. Can be converted to string to represent the remote connection as  <IP>:<port>.
-        public EndPoint RemoteEndPoint { get; }
+        public IPEndPoint RemoteEndPoint { get; }
         /// A reference to the underlying NetworkStream, one level higher than TcpClient, this is a byte stream.
         public NetworkStream Stream { get; }
         //public NetworkStream sslStream { get; }
@@ -36,7 +36,7 @@ namespace aiolib
         {
             ClientSocket = tcpClient;
 #pragma warning disable CS8601 // Possible null reference assignment.
-            RemoteEndPoint = tcpClient.Client.RemoteEndPoint;
+            RemoteEndPoint = IPEndPoint.Parse(tcpClient.Client.RemoteEndPoint.ToString());
 #pragma warning restore CS8601 // I throw an exception so not sure why IDE is complaining.
             if (RemoteEndPoint == null)
             {
@@ -60,6 +60,10 @@ namespace aiolib
 
             // AutoFlush causes the streamWritter buffer to instantly flush, instead of waiting for a manual flush.
             Writer.AutoFlush = true;
+        }
+        public IPAddress GetIPV4Address()
+        {
+            return this.RemoteEndPoint.Address;
         }
         /// <summary>
         /// Used internally or when an sending the data back from an asyncronous enviroment.

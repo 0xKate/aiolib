@@ -5,12 +5,44 @@ using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace aiolib
 {
+    public static class aioExtensions
+    {
+        public static async Task<string> GetClientDigest(this RemoteClient client)
+        {
+            SHA1 sha1 = SHA1.Create();
+
+            IPEndPoint remoteEnd = (IPEndPoint)client.ClientSocket.Client.RemoteEndPoint;
+            IPEndPoint localEnd = (IPEndPoint)client.ClientSocket.Client.LocalEndPoint;
+
+            byte[] localbytes = Encoding.UTF8.GetBytes(localEnd.ToString());
+            Stream localstream = new MemoryStream(localbytes);
+            byte[] localHash = await sha1.ComputeHashAsync(localstream);
+
+            byte[] remotebytes = Encoding.UTF8.GetBytes(remoteEnd.ToString());
+            Stream remotestream = new MemoryStream(remotebytes);
+            byte[] remoteHash = await sha1.ComputeHashAsync(remotestream);
+
+            //byte[] bothbytes = (byte[])localbytes.Concat(remotebytes);
+
+            byte[] bothbytes = new byte[localbytes.Length + remotebytes.Length];
+            Buffer.BlockCopy(localbytes, 0, bothbytes, 0, localbytes.Length);
+            Buffer.BlockCopy(remotebytes, 0, bothbytes, localbytes.Length, remotebytes.Length);
+
+            Stream bothstream = new MemoryStream(bothbytes);
+            byte[] digest = await sha1.ComputeHashAsync(bothstream);
+
+            return Convert.ToHexString(digest);
+        }
+    }
+
     public class aioStreamServer
     {
         /// List to keep track of connected clients.
@@ -20,18 +52,23 @@ namespace aiolib
         public ObservableCollection<RemoteClient> ConnectedClients { get; }
         /// Used in-case outside insertions or deletions to the ConnectedClients need to be made. If so, please respect the lock.
         public bool ConnectedClientsLock = false;
+        //public Authorization auth;
+        public bool ignoreHandshake = true;
+        public List<IPAddress> Blacklist { get ;}
         public ClientEvents ClientEventsPublisher { get; }
         public ServerEvents ServerEventsPublusher { get; }
         public bool ServerRunning { get; set; }
         private int Port { get; }
         private IPAddress IpAddress { get; }
-        //private RemoteClient LastClient { get; set; }
         private CancellationTokenSource ListenTokenSource { get; }
         private CancellationToken ListenToken { get; }
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         public aioStreamServer(int listenPort, IPAddress listenAddress)//, string certificate_loc) // SSL
 #pragma warning restore CS8618 // Complains that it must be Non-Nullable when i make it nullable, or complains that It must be Nullable when I make it Non-Nullable.
         {
+
+            //auth.
+            Blacklist = new List<IPAddress>();
             ConnectedClients = new ObservableCollection<RemoteClient>();
             ClientEventsPublisher = new ClientEvents();
             ServerEventsPublusher = new ServerEvents();
@@ -48,7 +85,6 @@ namespace aiolib
             //serverCertificate = X509Certificate.CreateFromCertFile(certificate_loc);
         }
 
-        // Coroutine
         public async Task Run()
         {
             //High level C# api for creating socket server.
@@ -64,39 +100,42 @@ namespace aiolib
                 {
                     // await for new clients. The thread may do other things while awaiting.
                     TcpClient tcpClient = await listener.AcceptTcpClientAsync(ListenToken);
+                    // Low resource Easy access to IPAddress and port right away.
+                    IPEndPoint remoteEnd = (IPEndPoint)tcpClient.Client.RemoteEndPoint;
+
+
+                    // The remote end should cause us to use as little resources as possible until we trust it a little more.
+                    // We can create a common handshake to ensure we are communicating with our application on the e
+
+                    bool authorized = this.ClientSecurityCheck(tcpClient, remoteEnd);
+                    if (!authorized)
+                    {
+                        try
+                        {
+                            Console.WriteLine($"Unauthorized connection attempt from {remoteEnd} @ {DateTime.Now}!");
+                            tcpClient.Close();
+                            tcpClient.Dispose();
+                            tcpClient = null;
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("Error disposing of unauthorized client!: " + ex.ToString());
+                        }
+                        continue;
+                    }
+
+
                     // Upgrade to our remoteClient wrapper.
                     RemoteClient remoteClient = new RemoteClient(tcpClient);
-                    //LastClient = remoteClient;
 
-                    ConnectedClientsLock = true;
-                    ConnectedClients.Add(remoteClient);
-                    ConnectedClientsLock = false;
 
-                    // SSL ToDO: Upgrade to SSL here. Implement another function between HandleClient and this loop to authenticate the client first via a handshake. Once we know we are talking
-                    // To our application and not something else then upgrade the network stream to SSL and handle the client.
-                    /*
-                    // https://docs.microsoft.com/en-us/dotnet/api/system.net.security.sslstream?redirectedfrom=MSDN&view=net-6.0
-                    using (SslStream sslStream = new SslStream(networkStream, false))
-                    {
-                        try { }
-                        catch (AuthenticationException e)
-                        {
-                        }
+                    // Keep track of client (Triggers ObservableCollection update)
+                    //ConnectedClientsLock = true;
+                    //ConnectedClients.Add(remoteClient);
+                    //ConnectedClientsLock = false;
 
-                        await sslStream.AuthenticateAsServerAsync(serverCertificate, clientCertificateRequired: false, checkCertificateRevocation: true);
-                        // Display the properties and settings for the authenticated stream.
-                        DisplaySecurityLevel(sslStream);
-                        DisplaySecurityServices(sslStream);
-                        DisplayCertificateInformation(sslStream);
-                        DisplayStreamProperties(sslStream);
-                    }
-                    */
-                    // END SSL
-
-                    // A client has connected, start an asyncronous Task
-                    // The program will be context-switching between all tasks and coroutines.
-                    Task HandleClientTask = HandleClientAsyncTask(remoteClient);
-                    // The task is created instantly, and this loop begins awaiting for a new client.
+                    Task WaitOrTimeoutTask = WaitForHandshake(remoteClient);
+                    //Task HandleClientTask = HandleClientAsyncTask(remoteClient);
                 }
                 catch (Exception ex)
                 {
@@ -115,6 +154,139 @@ namespace aiolib
                 client.SendData("Server shutting down.");
                 client.Close();
                 client.Dispose();
+            }
+        }
+
+
+        private bool ClientSecurityCheck(TcpClient remoteClient, IPEndPoint remoteEnd)
+        {
+            if (remoteClient == null)
+                throw new ArgumentNullException("RemoteClient is NULL!");
+
+            //Console.WriteLine(remoteEnd.Address);
+
+            if (Blacklist.Count > 0)
+            if (Blacklist.Any(item => item == remoteEnd.Address))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        //private async Task SSLInit()
+        //{
+            // SSL ToDO: Upgrade to SSL here. Implement another function between HandleClient and this loop to authenticate the client first via a handshake. Once we know we are talking
+            // To our application and not something else then upgrade the network stream to SSL and handle the client.
+            /*
+            // https://docs.microsoft.com/en-us/dotnet/api/system.net.security.sslstream?redirectedfrom=MSDN&view=net-6.0
+            using (SslStream sslStream = new SslStream(networkStream, false))
+            {
+                try { }
+                catch (AuthenticationException e)
+                {
+                }
+
+                await sslStream.AuthenticateAsServerAsync(serverCertificate, clientCertificateRequired: false, checkCertificateRevocation: true);
+                // Display the properties and settings for the authenticated stream.
+                DisplaySecurityLevel(sslStream);
+                DisplaySecurityServices(sslStream);
+                DisplayCertificateInformation(sslStream);
+                DisplayStreamProperties(sslStream);
+            }
+            */
+            // END SSL
+        //}
+
+        private async Task WaitForHandshake(RemoteClient remoteClient)
+        {   
+            // TODO
+            //ClientEventsPublisher.connectPendingEvent.Raise(remoteClient);
+            try
+            {
+                CancellationTokenSource readLine = new CancellationTokenSource();
+                CancellationToken token = readLine.Token;
+                TimeSpan timeout = TimeSpan.FromMilliseconds(5000);
+                //var task = remoteClient.Reader.ReadLineAsync().WaitAsync(timeout ,token).ConfigureAwait(false); // Requires .NET 6
+                var task = remoteClient.Reader.ReadLineAsync();
+                if (await Task.WhenAny(task, Task.Delay(timeout)) == task)
+                {
+                    // task completed within timeout
+                    bool handshakeFailed = false;
+
+                    Console.WriteLine($"Received handshake from cient {remoteClient}");                                       
+
+                    string digest = await remoteClient.GetClientDigest();
+
+                    Console.WriteLine($"{task.Result} == {digest}");
+
+                    if (!task.IsCompletedSuccessfully)
+                    {
+                        Console.WriteLine("Task failed to complete.");
+
+                    }
+                    else if (digest != task.Result)
+                    {
+                        Console.WriteLine($"{task.Result} != {digest}");
+                        Console.WriteLine($"Invalid Handshake received from cient {remoteClient}");
+                        handshakeFailed = true;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"{task.Result} == {digest}");
+                        handshakeFailed = false;
+                    }
+
+                    if (ignoreHandshake)
+                    {
+                        handshakeFailed = false;
+                    }
+
+                    if (!handshakeFailed)
+                    {
+                        // Keep track of client (Triggers ObservableCollection update)
+                        ConnectedClientsLock = true;
+                        ConnectedClients.Add(remoteClient);
+                        ConnectedClientsLock = false;
+
+                        // A client has been accepted, we can start the asyncronous receive loop Task
+                        // The program will be context-switching between all tasks and coroutines.
+                        await HandleClientAsyncTask(remoteClient);
+                        // The task is created instantly, and this loop begins awaiting for a new client.
+                    }
+                    else
+                    {
+                        // Drop Client event
+                        remoteClient.Close();
+                        remoteClient.Dispose();
+                        Console.WriteLine($"Invalid Handshake received from cient {remoteClient}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"Handshake timeout from cient {remoteClient}");
+                    readLine.Cancel();
+                    try
+                    {
+                        remoteClient.Close();
+                        remoteClient.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Error disposing of unauthorized client!: " + ex.ToString());
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                try
+                {
+                    remoteClient.Close();
+                    remoteClient.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Error disposing of unauthorized client!: " + ex.ToString());
+                }
             }
         }
 
@@ -186,11 +358,12 @@ namespace aiolib
                 _ = ConnectedClients.Remove(remoteClient);
                 ConnectedClientsLock = false;
 
-                Console.WriteLine($"Number of Clients: {ConnectedClients.Count}");
-
                 remoteClient.Close();
                 remoteClient.Dispose();
                 remoteClient = null;
+
+                Console.WriteLine($"Client Disposed. Remaining clients: {ConnectedClients.Count}");
+
 
                 // Memory Leak Testing
 
