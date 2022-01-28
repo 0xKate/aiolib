@@ -11,7 +11,7 @@ namespace ConsoleProgram
         {
             try
             {
-                int port = 50000;
+                int port = 5000;
                 IPAddress ipAddress = IPAddress.Parse("10.0.0.10");
                 bool running = true;
 

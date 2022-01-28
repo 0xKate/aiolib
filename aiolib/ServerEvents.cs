@@ -44,12 +44,14 @@ namespace aiolib
             }
         }
 
-        public class ServerEventArgs
+        public class SimpleEventArgs : EventArgs
         {
-            public string Message { get; set; }
-            public ServerEventArgs(string message)
+            public string Message { get; }
+            public dynamic AdditionalObject { get; }
+            public SimpleEventArgs(string Message, dynamic AdditionalObject=null)
             {
-                Message = message;
+                this.Message = Message;
+                this.AdditionalObject = AdditionalObject;
             }
         }
 
@@ -64,7 +66,7 @@ namespace aiolib
             /// <exception cref="AggregateException"></exception>
             public void Raise(string message)
             {
-                ServerEventArgs eventArgs = new ServerEventArgs(message);
+                SimpleEventArgs eventArgs = new SimpleEventArgs(message);
                 List<Exception> exceptions = new List<Exception>();
                 foreach (Delegate handler in OnEvent.GetInvocationList())
                 {

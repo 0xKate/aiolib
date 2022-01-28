@@ -27,7 +27,8 @@ namespace TestServerUI
             StreamServer.ClientEventsPublisher.disconnectEvent.OnDisconnect += OnDisconnectCallback;
             StreamServer.ClientEventsPublisher.receiveEvent.OnReceive += OnReceiveCallback;
             StreamServer.ClientEventsPublisher.exceptionEvent.OnException += OnExceptionCallback;
-            StreamServer.ClientEventsPublisher.receiveEvent.OnReceive += (sender, receiveArgs) => receiveArgs.Client.SendData(receiveArgs.Payload);
+            StreamServer.ClientEventsPublisher.receiveEvent.OnReceive += (sender, receiveArgs) => receiveArgs.Client.SendData("Echo: " + receiveArgs.Payload);
+            StreamServer.ignoreHandshake = false;
             BindingOperations.EnableCollectionSynchronization(StreamServer.ConnectedClients, StreamServer.ConnectedClientsLock);
 
             worker.DoWork += worker_DoWork;

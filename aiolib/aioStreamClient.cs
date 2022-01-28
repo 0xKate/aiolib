@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
+using aiolib;
 
 
 namespace aiolib
@@ -67,6 +68,7 @@ namespace aiolib
         private TcpClient remoteSocket;
         private NetworkStream networkStream;
         private string remoteEndPoint;
+        private IPEndPoint localEndPoint;
         public aioStreamClient(int port, IPAddress ipAddress)
         {
             this.port = port;
@@ -76,6 +78,7 @@ namespace aiolib
 
             remoteSocket = new TcpClient(this.ipAddress.ToString(), this.port);
             remoteEndPoint = remoteSocket.Client.RemoteEndPoint.ToString();
+            localEndPoint = (IPEndPoint)remoteSocket.Client.LocalEndPoint;
             networkStream = remoteSocket.GetStream();
         }
         public void Run()
@@ -84,8 +87,17 @@ namespace aiolib
             {
                 Console.WriteLine("Connected to " + remoteEndPoint);
                 Task ReceiveLoopTask = ReceiveLoopAsync();
-                Task SendDataTask = SendDataAsync("Hello from " + remoteEndPoint);
+                Task HandshakeTask = SendHandshake();
+                Task SendDataTask = SendDataAsync("Hello from " + localEndPoint);
             }
+        }
+
+        public async Task SendHandshake()
+        {
+            RemoteClient remoteClient = new RemoteClient(remoteSocket);
+            string digest = await remoteClient.GetClientDigest(false);
+            Console.WriteLine(digest);
+            await SendDataAsync(digest);
         }
 
         public async Task SendDataAsync(string data)

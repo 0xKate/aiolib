@@ -21,7 +21,7 @@ namespace aiolib
             array = null;
         }
 
-        public static async Task<string> GetClientDigest(this RemoteClient client)
+        public static async Task<string> GetClientDigest(this RemoteClient client, bool serverSide=true)
         {
             SHA1 sha1 = SHA1.Create();
             string digest = String.Empty;
@@ -40,9 +40,17 @@ namespace aiolib
                     byte[] remoteHash = await sha1.ComputeHashAsync(remotestream);
 
                     byte[] bothHash = new byte[localHash.Length + remoteHash.Length];
+                    if (serverSide)
+                    {
+                        Buffer.BlockCopy(localHash, 0, bothHash, 0, localHash.Length);
+                        Buffer.BlockCopy(remoteHash, 0, bothHash, localHash.Length, remoteHash.Length);
+                    }
+                    else
+                    {
+                        Buffer.BlockCopy(remoteHash, 0, bothHash, 0, remoteHash.Length);
+                        Buffer.BlockCopy(localHash, 0, bothHash, remoteHash.Length, localHash.Length);
+                    }
 
-                    Buffer.BlockCopy(localHash, 0, bothHash, 0, localHash.Length);
-                    Buffer.BlockCopy(remoteHash, 0, bothHash, localHash.Length, remoteHash.Length);
 
                     using (MemoryStream bothstream = new MemoryStream(bothHash))
                     {
@@ -238,7 +246,7 @@ namespace aiolib
 
                     string digest = await remoteClient.GetClientDigest();
 
-                    Console.WriteLine($"{task.Result} == {digest}");
+                    //Console.WriteLine($"{task.Result} == {digest}");
 
                     if (!task.IsCompletedSuccessfully)
                     {
@@ -248,7 +256,6 @@ namespace aiolib
                     else if (digest != task.Result)
                     {
                         Console.WriteLine($"{task.Result} != {digest}");
-                        Console.WriteLine($"Invalid Handshake received from cient {remoteClient}");
                         handshakeFailed = true;
                     }
                     else

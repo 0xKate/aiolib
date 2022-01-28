@@ -41,6 +41,68 @@ namespace aiolib
         }
     }
 
+    public class Example
+    {
+        public GenericEvent genericEvent = new GenericEvent();
+        public void HowToRaiseEvent()
+        {
+
+            var someObject = new Object();
+            genericEvent.Raise("My Event Message", someObject);
+        }
+        public void EventCallback(object sender, SimpleEventArgs eventArgs)
+        {
+            Console.WriteLine($"Event message: {eventArgs.Message} received object: {eventArgs.AdditionalObject}");
+        }
+        public void HowToSubscribeToEvent()
+        {
+            genericEvent.OnEvent += EventCallback;
+        }
+    }
+
+    public class SimpleEventArgs : EventArgs
+    {
+        public string Message { get; }
+        public dynamic AdditionalObject { get; }
+        public SimpleEventArgs(string Message, dynamic AdditionalObject = null)
+        {
+            this.Message = Message;
+            this.AdditionalObject = AdditionalObject;
+        }
+    }
+    public class GenericEvent
+    {
+        // Make sure the EventArgs type here also matches the one you created. The OnEvent variable may be renamed if you want.
+        public event EventHandler<SimpleEventArgs> OnEvent;
+        // Make sure the signature of the Raise() method matches the initializer of your EventArgs class.
+        public void Raise(string message, dynamic additionalObject)
+        {
+            // Make sure the EventArgs type here is the one you created.
+            SimpleEventArgs eventArgs = new SimpleEventArgs(message, additionalObject);
+            // Code below here shouldnt change.
+            List<Exception> exceptions = new List<Exception>();
+            foreach (Delegate handler in OnEvent.GetInvocationList())
+            {
+                try
+                {
+                    handler.DynamicInvoke(this, eventArgs);
+                }
+                catch (Exception e)
+                {
+                    exceptions.Add(e);
+                }
+            }
+
+            if (exceptions.Any())
+            {
+                throw new AggregateException(exceptions);
+            }
+        }
+    }
+
+
+
+
     public class ClientEvents
     {
         public ConnectEvent connectEvent;
