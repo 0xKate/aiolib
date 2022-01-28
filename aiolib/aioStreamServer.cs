@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -68,13 +69,14 @@ namespace aiolib
             return digest;
         }
     }
-
     public class aioStreamServer
     {
+        /// <summary>
         /// List to keep track of connected clients.
-        /// Note: To obvserve this from WPF, while the server is in a background thread, use the following line of code from the observing thread.
-        /// private object lockObject = new object(); // Note
-        /// BindingOperations.EnableCollectionSynchronization(StreamServer.ConnectedClients, lockObject);
+        /// Note: To obvserve this from WPF, while the server is in a background thread, use the following line of code from the observing thread:  
+        /// [private object lockObject = new object();], 
+        /// [BindingOperations.EnableCollectionSynchronization(StreamServer.ConnectedClients, lockObject);]
+        /// </summary>
         public ObservableCollection<RemoteClient> ConnectedClients { get; }
         /// Used in-case outside insertions or deletions to the ConnectedClients need to be made. If so, please respect the lock.
         public bool ConnectedClientsLock = false;
@@ -91,9 +93,7 @@ namespace aiolib
         private IPAddress IpAddress { get; }
         private CancellationTokenSource ListenTokenSource { get; }
         private CancellationToken ListenToken { get; }
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
         public aioStreamServer(int listenPort, IPAddress listenAddress)//, string certificate_loc) // SSL
-#pragma warning restore CS8618 // Complains that it must be Non-Nullable when i make it nullable, or complains that It must be Nullable when I make it Non-Nullable.
         {
 
             ignoreHandshake = true; 
@@ -113,7 +113,6 @@ namespace aiolib
             // SSL
             //serverCertificate = X509Certificate.CreateFromCertFile(certificate_loc);
         }
-
         public async Task Run()
         {
             //High level C# api for creating socket server.
@@ -173,7 +172,6 @@ namespace aiolib
                 }
             }
         }
-
         public void Stop()
         {
             this.ServerRunning = false;
@@ -185,8 +183,6 @@ namespace aiolib
                 client.Dispose();
             }
         }
-
-
         private bool ClientSecurityCheck(TcpClient remoteClient, IPEndPoint remoteEnd)
         {
             if (remoteClient == null)
@@ -201,45 +197,62 @@ namespace aiolib
             }
             return true;
         }
-
+        #region SSL Notes
         //private async Task SSLInit()
         //{
-            // SSL ToDO: Upgrade to SSL here. Implement another function between HandleClient and this loop to authenticate the client first via a handshake. Once we know we are talking
-            // To our application and not something else then upgrade the network stream to SSL and handle the client.
-            /*
-            // https://docs.microsoft.com/en-us/dotnet/api/system.net.security.sslstream?redirectedfrom=MSDN&view=net-6.0
-            using (SslStream sslStream = new SslStream(networkStream, false))
+        // SSL ToDO: Upgrade to SSL here. Implement another function between HandleClient and this loop to authenticate the client first via a handshake. Once we know we are talking
+        // To our application and not something else then upgrade the network stream to SSL and handle the client.
+        /*
+        // https://docs.microsoft.com/en-us/dotnet/api/system.net.security.sslstream?redirectedfrom=MSDN&view=net-6.0
+        using (SslStream sslStream = new SslStream(networkStream, false))
+        {
+            try { }
+            catch (AuthenticationException e)
             {
-                try { }
-                catch (AuthenticationException e)
-                {
-                }
-
-                await sslStream.AuthenticateAsServerAsync(serverCertificate, clientCertificateRequired: false, checkCertificateRevocation: true);
-                // Display the properties and settings for the authenticated stream.
-                DisplaySecurityLevel(sslStream);
-                DisplaySecurityServices(sslStream);
-                DisplayCertificateInformation(sslStream);
-                DisplayStreamProperties(sslStream);
             }
-            */
-            // END SSL
-        //}
 
+            await sslStream.AuthenticateAsServerAsync(serverCertificate, clientCertificateRequired: false, checkCertificateRevocation: true);
+            // Display the properties and settings for the authenticated stream.
+            DisplaySecurityLevel(sslStream);
+            DisplaySecurityServices(sslStream);
+            DisplayCertificateInformation(sslStream);
+            DisplayStreamProperties(sslStream);
+        }
+        */
+        // END SSL
+        //}
+        #endregion
+        public async Task<T> CancellableTask<T>(Task<T> task, CancellationToken cancellationToken)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+            using (cancellationToken.Register(
+                        s => ((TaskCompletionSource<bool>)s).TrySetResult(true), tcs))
+                if (task != await Task.WhenAny(task, tcs.Task))
+                    throw new OperationCanceledException(cancellationToken);
+            return await task;
+        }
         private async Task WaitForHandshake(RemoteClient remoteClient)
-        {   
+        {
             // TODO
             //ClientEventsPublisher.connectPendingEvent.Raise(remoteClient);
+            CancellationTokenSource readLineTokenSource = new CancellationTokenSource();
+            CancellationToken readLineToken = readLineTokenSource.Token;
             try
             {
-                CancellationTokenSource readLine = new CancellationTokenSource();
-                CancellationToken token = readLine.Token;
                 TimeSpan timeout = TimeSpan.FromMilliseconds(5000);
                 //var task = remoteClient.Reader.ReadLineAsync().WaitAsync(timeout ,token).ConfigureAwait(false); // Requires .NET 6
-                var task = remoteClient.Reader.ReadLineAsync();
-                if (await Task.WhenAny(task, Task.Delay(timeout)) == task)
+                Task<string> readerTask = CancellableTask(remoteClient.Reader.ReadLineAsync(), readLineToken);
+                //readerTask.Dis
+                //remoteClient.Reader.ReadLineAsync()
+                //Task<string> readerTask = remoteClient.Reader.ReadLineAsync().WaitAsync(timeout, token);
+                //ConfiguredTaskAwaitable<string> ConfReadTask = ReadTask.ConfigureAwait(false);
+                //var readerTask = remoteClient.Reader.ReadLineAsync();
+                if (await Task.WhenAny(readerTask, Task.Delay(timeout)) == readerTask)
                 {
-                    // task completed within timeout
+                    #region WithinTimeoutBlock
+                    // If the task was cancelled, this should send execution down to the finally block.
+                    readLineToken.ThrowIfCancellationRequested();
+                    
                     bool handshakeFailed = false;
 
                     Console.WriteLine($"Received handshake from cient {remoteClient}");                                       
@@ -248,19 +261,19 @@ namespace aiolib
 
                     //Console.WriteLine($"{task.Result} == {digest}");
 
-                    if (!task.IsCompletedSuccessfully)
+                    if (!readerTask.IsCompletedSuccessfully)
                     {
                         Console.WriteLine("Task failed to complete.");
 
                     }
-                    else if (digest != task.Result)
+                    else if (digest != readerTask.Result)
                     {
-                        Console.WriteLine($"{task.Result} != {digest}");
+                        Console.WriteLine($"{readerTask.Result} != {digest}");
                         handshakeFailed = true;
                     }
                     else
                     {
-                        Console.WriteLine($"{task.Result} == {digest}");
+                        Console.WriteLine($"{readerTask.Result} == {digest}");
                         handshakeFailed = false;
                     }
 
@@ -283,16 +296,19 @@ namespace aiolib
                     }
                     else
                     {
+                        
                         // Drop Client event
                         remoteClient.Close();
                         remoteClient.Dispose();
                         Console.WriteLine($"Invalid Handshake received from cient {remoteClient}");
                     }
+                    #endregion
                 }
                 else
                 {
+                    #region TimeoutOccourredBlock
                     Console.WriteLine($"Handshake timeout from cient {remoteClient}");
-                    readLine.Cancel();
+                    readLineTokenSource.Cancel();
                     try
                     {
                         remoteClient.Close();
@@ -302,12 +318,24 @@ namespace aiolib
                     {
                         Console.WriteLine("Error disposing of unauthorized client!: " + ex.ToString());
                     }
+                    #endregion
                 }
             }
-            catch (Exception)
+            catch (OperationCanceledException) 
+            {
+                Console.WriteLine("Canceled await handshake task.");
+            }
+            catch (Exception err)
+            {
+                Console.WriteLine("Unhandled exception in WaitForHandshake: " + err.Message);
+                throw;
+            }
+            finally
             {
                 try
                 {
+                    readLineTokenSource.Cancel(true);
+                    readLineTokenSource.Dispose();
                     remoteClient.Close();
                     remoteClient.Dispose();
                 }
@@ -315,9 +343,9 @@ namespace aiolib
                 {
                     Console.WriteLine("Error disposing of unauthorized client!: " + ex.ToString());
                 }
+
             }
         }
-
         private async Task HandleClientAsyncTask(RemoteClient remoteClient)
         {
             // Signal a client has connected, passes the connected client to the event.
@@ -400,7 +428,7 @@ namespace aiolib
                 //GC.Collect();
             }
         }
-
+        #region SSL Notes
         // SSL
         /*
         static X509Certificate serverCertificate = null;
@@ -453,5 +481,6 @@ namespace aiolib
             }
         }
         */
+        #endregion
     }
 }
