@@ -120,7 +120,8 @@ namespace aiolib
                 // Free any other managed objects here.
                 Writer.Dispose();
                 Reader.Dispose();
-                Stream.Dispose();                
+                Stream.Dispose();
+                ReaderTokenSource.Dispose();
             }
             // Free any unmanaged objects here.
             ClientSocket.Dispose();
