@@ -15,10 +15,6 @@
             <Label Content = "Connected Clients" HorizontalAlignment = "Center" Width = "110"/>
             <ListBox ItemsSource="{Binding ConnectedClients}"/>
         </StackPanel>
-
-
-
-
-
+        <Button Grid.Column="1" Content="Create Cert" HorizontalAlignment="Left" Margin="436,404,0,0" VerticalAlignment="Top" Width="113" Click="Button_Click"/>
     </Grid>
 </Window>
