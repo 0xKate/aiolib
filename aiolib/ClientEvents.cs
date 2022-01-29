@@ -1,9 +1,4 @@
-﻿using aiolib;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
-#pragma warning disable CS8618 // The IDE is being really weird about this entire .cs file, it works, and also did not display errors in older versions of .NET
+﻿#pragma warning disable CS8618 // The IDE is being really weird about this entire .cs file, it works, and also did not display errors in older versions of .NET
 namespace aiolib
 {
     // Not quite sure how to inherit this and overwrite the constructor with additional properties.
@@ -11,14 +6,14 @@ namespace aiolib
     {
         public class Args : EventArgs
         {
-            public RemoteClient Client { get; set; }
-            public Args(RemoteClient client)
+            public RemoteHost Client { get; set; }
+            public Args(RemoteHost client)
             {
                 Client = client;
             }
         }
         public event EventHandler<Args> OnEvent;
-        public void Raise(RemoteClient client)
+        public void Raise(RemoteHost client)
         {
             Args eventArgs = new Args(client);
             List<Exception> exceptions = new List<Exception>();
@@ -120,9 +115,9 @@ namespace aiolib
         {
             public class ConnectArgs : EventArgs
             {
-                public RemoteClient Client { get; set; }
+                public RemoteHost Client { get; set; }
 
-                public ConnectArgs(RemoteClient client)
+                public ConnectArgs(RemoteHost client)
                 {
                     Client = client;
                 }
@@ -130,7 +125,7 @@ namespace aiolib
             }
 
             public event EventHandler<ConnectArgs> OnConnect;
-            public void Raise(RemoteClient client)
+            public void Raise(RemoteHost client)
             {
                 ConnectArgs eventArgs = new ConnectArgs(client);
                 List<Exception> exceptions = new List<Exception>();
@@ -156,16 +151,16 @@ namespace aiolib
         {
             public class DisconnectArgs : EventArgs
             {
-                public RemoteClient Client { get; set; }
+                public RemoteHost Client { get; set; }
 
-                public DisconnectArgs(RemoteClient client)
+                public DisconnectArgs(RemoteHost client)
                 {
                     Client = client;
                 }
 
             }
             public event EventHandler<DisconnectArgs> OnDisconnect;
-            public void Raise(RemoteClient client)
+            public void Raise(RemoteHost client)
             {
                 DisconnectArgs eventArgs = new DisconnectArgs(client);
                 List<Exception> exceptions = new List<Exception>();
@@ -191,10 +186,10 @@ namespace aiolib
         {
             public class ReceiveEventArgs : EventArgs
             {
-                public RemoteClient Client { get; set; }
+                public RemoteHost Client { get; set; }
                 public string Payload { get; set; }
 
-                public ReceiveEventArgs(RemoteClient client, string payload)
+                public ReceiveEventArgs(RemoteHost client, string payload)
                 {
                     Client = client;
                     Payload = payload;
@@ -204,7 +199,7 @@ namespace aiolib
 
             public event EventHandler<ReceiveEventArgs> OnReceive = delegate { };
 
-            public void Raise(RemoteClient client, string payload)
+            public void Raise(RemoteHost client, string payload)
             {
                 ReceiveEventArgs eventArgs = new ReceiveEventArgs(client, payload);
                 List<Exception> exceptions = new List<Exception>();
@@ -230,10 +225,10 @@ namespace aiolib
         {
             public class ExceptionEventArgs : EventArgs
             {
-                public RemoteClient Client { get; set; }
+                public RemoteHost Client { get; set; }
                 public Exception Error { get; set; }
 
-                public ExceptionEventArgs(RemoteClient client, Exception exception)
+                public ExceptionEventArgs(RemoteHost client, Exception exception)
                 {
                     Client = client;
                     Error = exception;
@@ -243,7 +238,7 @@ namespace aiolib
 
             public event EventHandler<ExceptionEventArgs> OnException = delegate { };
 
-            public void Raise(RemoteClient client, Exception exception)
+            public void Raise(RemoteHost client, Exception exception)
             {
                 ExceptionEventArgs eventArgs = new ExceptionEventArgs(client, exception);
                 List<Exception> exceptions = new List<Exception>();
