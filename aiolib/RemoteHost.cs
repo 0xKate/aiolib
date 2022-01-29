@@ -123,9 +123,12 @@ namespace aiolib
             _Writer.AutoFlush = true;
         }
         /// <summary>Get the IPAddress of the RemoteHost</summary>
-        public IPAddress GetIPV4Address()
+        public IPAddress? GetIPV4Address()
         {
-            return this.RemoteEndPoint.Address;
+            if (this.RemoteEndPoint == null)
+                return null;
+            else
+                return this.RemoteEndPoint.Address;
         }
         /// <summary>
         /// Used internally or when an sending the data back from an asyncronous enviroment.
@@ -135,7 +138,8 @@ namespace aiolib
         internal async Task SendDataAsync(string data)
         {
             // Write the data to the socket (remote client), but do so in an asyncronous manner so other tasks may run while the client receives it.
-            await Writer.WriteLineAsync(data);
+            if (Writer != null)
+                await Writer.WriteLineAsync(data);
         }
         /// <summary>
         /// The recomended method for sending data to the client. A fire-and-forget method that Can be used from any enviroment.
@@ -143,35 +147,7 @@ namespace aiolib
         /// <param name="message"></param>
         public void SendData(string message)
         {
-            Task SendTask = SendDataAsync(message);
-        }
-        private void DisplayCertificateInformation()
-        {
-            if (this._SSLStream == null)
-            {
-                return;
-            }    
-            Console.WriteLine("Certificate revocation list checked: {0}", this._SSLStream.CheckCertRevocationStatus);
-
-            X509Certificate? remoteCertificate = this._SSLStream.RemoteCertificate;
-            if (remoteCertificate != null)
-            {
-                Console.WriteLine("Remote cert was issued to {0} and is valid from {1} until {2}.",
-                    remoteCertificate.Subject,
-                    remoteCertificate.GetEffectiveDateString(),
-                    remoteCertificate.GetExpirationDateString());
-            }
-            else
-                Console.WriteLine("Remote certificate is null!");
-
-            X509Certificate? localCertificate = this._SSLStream.LocalCertificate;
-            if (localCertificate != null)
-            {
-                Console.WriteLine("Local cert was issued to {0} and is valid from {1} until {2}.",
-                    localCertificate.Subject,
-                    localCertificate.GetEffectiveDateString(),
-                    localCertificate.GetExpirationDateString());
-            }
+            _ = SendDataAsync(message);
         }
         private bool ValidateServerCertificate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
         {
@@ -187,7 +163,25 @@ namespace aiolib
                 if (this._SSLStream != null)
                     if (this._SSLStream.IsAuthenticated)
                     {
-                        DisplayCertificateInformation();
+                        X509Certificate? remoteCertificate = this._SSLStream.RemoteCertificate;
+                        if (remoteCertificate != null)
+                        {
+                            Console.WriteLine("Remote cert was issued to {0} and is valid from {1} until {2}.",
+                                remoteCertificate.Subject,
+                                remoteCertificate.GetEffectiveDateString(),
+                                remoteCertificate.GetExpirationDateString());
+                        }
+
+                        X509Certificate? localCertificate = this._SSLStream.LocalCertificate;
+                        if (localCertificate != null)
+                        {
+                            Console.WriteLine("Local cert was issued to {0} and is valid from {1} until {2}.",
+                                localCertificate.Subject,
+                                localCertificate.GetEffectiveDateString(),
+                                localCertificate.GetExpirationDateString());
+                        }
+
+                        Console.WriteLine("Certificate revocation list checked: {0}", this._SSLStream.CheckCertRevocationStatus);
                     }                
                 return false;
             }
