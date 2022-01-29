@@ -1,4 +1,10 @@
-﻿#pragma warning disable CS8618 // The IDE is being really weird about this entire .cs file, it works, and also did not display errors in older versions of .NET
+﻿// This file is part of aiolib
+// See https://github.com/0xKate/aiolib for more information
+// Copyright (C) 0xKate <kate@0xkate.net>
+// This program is published under a GPLv2 license
+// https://github.com/0xKate/aiolib/blob/master/LICENSE
+
+#pragma warning disable CS8618 // The IDE is being really weird about this entire .cs file, it works, and also did not display errors in older versions of .NET
 namespace aiolib
 {
     // Not quite sure how to inherit this and overwrite the constructor with additional properties.

@@ -1,4 +1,10 @@
-﻿using System;
+﻿// This file is part of aiolib
+// See https://github.com/0xKate/aiolib for more information
+// Copyright (C) 0xKate <kate@0xkate.net>
+// This program is published under a GPLv2 license
+// https://github.com/0xKate/aiolib/blob/master/LICENSE
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;

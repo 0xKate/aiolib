@@ -1,4 +1,10 @@
-﻿using System.Net;
+﻿// This file is part of aiolib
+// See https://github.com/0xKate/aiolib for more information
+// Copyright (C) 0xKate <kate@0xkate.net>
+// This program is published under a GPLv2 license
+// https://github.com/0xKate/aiolib/blob/master/LICENSE
+
+using System.Net;
 using System.Net.Sockets;
 
 
@@ -39,6 +45,7 @@ namespace aiolib
     {
         public bool EnableSSL { get; }
         public IPEndPoint RemoteEndPoint { get { return _Connection.RemoteEndPoint; } }
+        public IPEndPoint? LocalEndPoint { get { return (IPEndPoint?)_Connection.ClientSocket.Client.LocalEndPoint; } }
         public bool IsConnected { get { return this._Connection.ClientSocket.Connected; } }
         internal RemoteHost _Connection;
         private bool _closed;

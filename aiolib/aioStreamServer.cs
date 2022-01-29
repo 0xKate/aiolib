@@ -1,4 +1,10 @@
-﻿using System.Collections.ObjectModel;
+﻿// This file is part of aiolib
+// See https://github.com/0xKate/aiolib for more information
+// Copyright (C) 0xKate <kate@0xkate.net>
+// This program is published under a GPLv2 license
+// https://github.com/0xKate/aiolib/blob/master/LICENSE
+
+using System.Collections.ObjectModel;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
