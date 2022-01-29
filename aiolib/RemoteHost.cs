@@ -149,6 +149,31 @@ namespace aiolib
         {
             _ = SendDataAsync(message);
         }
+
+        private void DisplayConnectedCertInfo()
+        {
+            if (this._SSLStream != null)
+                if (this._SSLStream.IsAuthenticated)
+                {
+                    X509Certificate? remoteCertificate = this._SSLStream.RemoteCertificate;
+                    if (remoteCertificate != null)
+                    {
+                        Console.WriteLine("Remote cert was issued to {0} and is valid from {1} until {2}.",
+                            remoteCertificate.Subject,
+                            remoteCertificate.GetEffectiveDateString(),
+                            remoteCertificate.GetExpirationDateString());
+                    }
+                    X509Certificate? localCertificate = this._SSLStream.LocalCertificate;
+                    if (localCertificate != null)
+                    {
+                        Console.WriteLine("Local cert was issued to {0} and is valid from {1} until {2}.",
+                            localCertificate.Subject,
+                            localCertificate.GetEffectiveDateString(),
+                            localCertificate.GetExpirationDateString());
+                    }
+                    Console.WriteLine("Certificate revocation list checked: {0}", this._SSLStream.CheckCertRevocationStatus);
+                }
+        }
         private bool ValidateServerCertificate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
         {
             if (certificate == null)
@@ -158,31 +183,7 @@ namespace aiolib
                 return true;
             else // Do not allow this client to communicate with unauthenticated servers.
             {
-                Console.WriteLine("Certificate error: {0}", sslPolicyErrors);
-
-                if (this._SSLStream != null)
-                    if (this._SSLStream.IsAuthenticated)
-                    {
-                        X509Certificate? remoteCertificate = this._SSLStream.RemoteCertificate;
-                        if (remoteCertificate != null)
-                        {
-                            Console.WriteLine("Remote cert was issued to {0} and is valid from {1} until {2}.",
-                                remoteCertificate.Subject,
-                                remoteCertificate.GetEffectiveDateString(),
-                                remoteCertificate.GetExpirationDateString());
-                        }
-
-                        X509Certificate? localCertificate = this._SSLStream.LocalCertificate;
-                        if (localCertificate != null)
-                        {
-                            Console.WriteLine("Local cert was issued to {0} and is valid from {1} until {2}.",
-                                localCertificate.Subject,
-                                localCertificate.GetEffectiveDateString(),
-                                localCertificate.GetExpirationDateString());
-                        }
-
-                        Console.WriteLine("Certificate revocation list checked: {0}", this._SSLStream.CheckCertRevocationStatus);
-                    }                
+                Console.WriteLine("Certificate error: {0}", sslPolicyErrors);         
                 return false;
             }
         }
@@ -244,7 +245,18 @@ namespace aiolib
             {
                 if (this._SSLStream != null)
                 {
-                    await this._SSLStream.AuthenticateAsServerAsync(serverCertificate, false, true);
+                    try
+                    {
+                        await this._SSLStream.AuthenticateAsServerAsync(serverCertificate, false, true);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+                        this.Close();
+                        this.Dispose();
+                        return null;
+                    }
+                    
 
                     if (!this._SSLStream.IsEncrypted)
                         throw new AuthenticationException("Stream not encrypted!");

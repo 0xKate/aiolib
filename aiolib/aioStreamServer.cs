@@ -5,6 +5,7 @@
 // https://github.com/0xKate/aiolib/blob/master/LICENSE
 
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -12,6 +13,23 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace aiolib
 {
+    public class ConnectionException : Exception
+    {
+        public ConnectionException()
+        {
+        }
+
+        public ConnectionException(string message)
+            : base(message)
+        {
+        }
+
+        public ConnectionException(string message, Exception inner)
+            : base(message, inner)
+        {
+        }
+    }
+
     public class aioStreamServer
     {
         /// <summary>
@@ -154,7 +172,7 @@ namespace aiolib
         private bool ClientSecurityCheck(TcpClient remoteClient, IPEndPoint remoteEnd)
         {
             if (remoteClient == null)
-                throw new ArgumentNullException("RemoteHost is NULL!");
+                throw new ArgumentNullException(nameof(remoteClient));
 
             //Console.WriteLine(remoteEnd.Address);
 
@@ -171,6 +189,8 @@ namespace aiolib
 
         private async Task WaitForHandshake(RemoteHost remoteClient)
         {
+            if (remoteClient.Reader == null)
+                throw new ConnectionException("WaitForHandshake: ConnectionException - Null reader error.");
             // TODO
             //ClientEventsPublisher.connectPendingEvent.Raise(remoteClient);
             CancellationTokenSource readLineTokenSource = new CancellationTokenSource();
@@ -283,6 +303,14 @@ namespace aiolib
             {
                 Console.WriteLine("Canceled await handshake task.");
             }
+            catch (Win32Exception err)
+            {
+                Console.WriteLine("Caught Win32Exception in WaitForHandshake - Exception: " + err);
+            }
+            catch (IOException err)
+            {
+                Console.WriteLine("Caught IOException in WaitForHandshake - Exception: " + err);
+            }
             catch (Exception err)
             {
                 Console.WriteLine("Unhandled exception in WaitForHandshake: " + err);
@@ -300,6 +328,8 @@ namespace aiolib
         }
         private async Task HandleClientAsyncTask(RemoteHost remoteClient)
         {
+            if (remoteClient.Reader == null)
+                throw new ConnectionException("WaitForHandshake: ConnectionException - Null reader error.");
             // Signal a client has connected, passes the connected client to the event.
             ClientEventsPublisher.connectEvent.Raise(remoteClient);
             try
@@ -332,7 +362,8 @@ namespace aiolib
                 }
             }
             // The StreamReader.ReadLineAsync will throw IO exception when the underlying socket closes.
-            catch (IOException err)
+            catch (IOException err) // Discarding IOException w/ Inner:SocketException only
+            // Discarding Win32Exception (0x80090325): The certificate chain was issued by an authority that is not trusted.
             {
                 var InnerEx = err.InnerException;
                 if (InnerEx == null)
@@ -343,10 +374,16 @@ namespace aiolib
                 }
                 else if (InnerEx.GetType() != typeof(SocketException))
                 {
-                    Console.WriteLine($"Unhandled Inner Exception for IOException: {InnerEx}");
-                    ClientEventsPublisher.exceptionEvent.Raise(remoteClient, InnerEx);
-                    throw;
+                    if (InnerEx.GetType() != typeof(Win32Exception))
+                    {
+                        Console.WriteLine($"Unhandled Inner Exception for IOException: {InnerEx}");
+                        ClientEventsPublisher.exceptionEvent.Raise(remoteClient, InnerEx);
+                        throw;
+                    }
                 }
+
+                // Prints the discarded exceptions
+                //Console.WriteLine(err);
             }
             // The StreamReader.ReadLineAsync inner exception is a SocketException socket closed by remote host.
             catch (Exception err)
@@ -359,7 +396,7 @@ namespace aiolib
             {
                 // Raise a disconnect event.
                 ClientEventsPublisher.disconnectEvent.Raise(remoteClient);
-                Console.WriteLine($"Raised Disconnect Event");
+                //Console.WriteLine($"Raised Disconnect Event");
                 // Cleanup the handles and resources now that we are done with them.                
 
                 // Remove the client from the connected clents list.
@@ -372,7 +409,7 @@ namespace aiolib
 
                 if (remoteClient != null)
                 {
-                    Console.WriteLine($"remoteClient is not null");
+                    //Console.WriteLine($"remoteClient is not null");
                     remoteClient.Close();
                     remoteClient.Dispose();
                 }
