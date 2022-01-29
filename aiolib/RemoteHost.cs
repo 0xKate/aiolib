@@ -135,12 +135,50 @@ namespace aiolib
         {
             Task SendTask = SendDataAsync(message);
         }
+        private void DisplayCertificateInformation(SslStream stream)
+        {
+            Console.WriteLine("Certificate revocation list checked: {0}", stream.CheckCertRevocationStatus);
+            Console.WriteLine($"HandleClientAsyncTask finished without crashing");
+
+            X509Certificate localCertificate = stream.LocalCertificate;
+            if (stream.LocalCertificate != null)
+            {
+                Console.WriteLine("Local cert was issued to {0} and is valid from {1} until {2}.",
+                    localCertificate.Subject,
+                    localCertificate.GetEffectiveDateString(),
+                    localCertificate.GetExpirationDateString());
+            }
+            else
+            {
+                Console.WriteLine("Local certificate is null.");
+            }
+            // Display the properties of the client's certificate.
+            X509Certificate remoteCertificate = stream.RemoteCertificate;
+            if (stream.RemoteCertificate != null)
+            {
+                Console.WriteLine("Remote cert was issued to {0} and is valid from {1} until {2}.",
+                    remoteCertificate.Subject,
+                    remoteCertificate.GetEffectiveDateString(),
+                    remoteCertificate.GetExpirationDateString());
+            }
+            else
+            {
+                Console.WriteLine("Remote certificate is null.");
+            }
+        }
         public bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
         {
             if (sslPolicyErrors == SslPolicyErrors.None)
                 return true;
             Console.WriteLine("Certificate error: {0}", sslPolicyErrors);
             // Do not allow this client to communicate with unauthenticated servers.
+
+
+            Console.WriteLine($"Certificate Subject {certificate.Subject}");
+
+            return true;
+            //DisplayCertificateInformation(this._SSLStream);
+
              return false;
         }
         public async Task<SslStream?> SSLUpgradeAsClientAsync(IPHostEntry RemoteHostInfo)
@@ -152,7 +190,7 @@ namespace aiolib
             try
             {
                 string host = RemoteHostInfo.HostName;
-                if (RemoteHostname == null)
+                if (host == null)
                     throw new ArgumentNullException(nameof(RemoteHostInfo));
                 else
                 {
@@ -164,10 +202,11 @@ namespace aiolib
                     if (!_SSLStream.IsSigned)
                         throw new AuthenticationException("Stream not signed!");
 
-                    if (!_SSLStream.IsMutuallyAuthenticated)
-                        throw new AuthenticationException("Stream not Mutually Authenticated!");
+                    //if (!_SSLStream.IsMutuallyAuthenticated)
+                    //    throw new AuthenticationException("Stream not Mutually Authenticated!");
 
                     _SSLWriter = new StreamWriter(_SSLStream);
+                    _SSLWriter.AutoFlush = true;
                     _SSLReader = new StreamReader(_SSLStream);
                     _connectionUpgraded = true;
                     return _SSLStream;
@@ -184,27 +223,35 @@ namespace aiolib
             }
             return null;
         }
-        public async Task<SslStream> SSLUpgradeAsServerAsync(X509Certificate serverCertificate)
+        public async Task<SslStream?> SSLUpgradeAsServerAsync(X509Certificate serverCertificate)
         {
-            SslStream sslStream = new SslStream(this._Stream, false);
+            Console.WriteLine("Trying to create sslStream");
+            this._SSLStream = new SslStream(this._Stream, false);
+            Console.WriteLine("Created sslStream instance");
             // Authenticate the server but don't require the client to authenticate.
             try
             {
-                await sslStream.AuthenticateAsServerAsync(serverCertificate, false, true);
+                if (this._SSLStream != null)
+                {
+                    await this._SSLStream.AuthenticateAsServerAsync(serverCertificate, false, true);
 
-                if (!this._SSLStream.IsEncrypted)
-                    throw new AuthenticationException("Stream not encrypted!");
+                    if (!this._SSLStream.IsEncrypted)
+                        throw new AuthenticationException("Stream not encrypted!");
 
-                if (!this._SSLStream.IsSigned)
-                    throw new AuthenticationException("Stream not signed!");
+                    if (!this._SSLStream.IsSigned)
+                        throw new AuthenticationException("Stream not signed!");
 
-                if (!this._SSLStream.IsMutuallyAuthenticated)
-                    throw new AuthenticationException("Stream not Mutually Authenticated!");
+                    //if (!this._SSLStream.IsMutuallyAuthenticated)
+                    //    throw new AuthenticationException("Stream not Mutually Authenticated!");
 
-                this._SSLWriter = new StreamWriter(this._SSLStream);
-                this._SSLReader = new StreamReader(this._SSLStream);
-                this._connectionUpgraded = true;
-                return this._SSLStream;
+                    this._SSLWriter = new StreamWriter(this._SSLStream);
+                    _SSLWriter.AutoFlush = true;
+                    this._SSLReader = new StreamReader(this._SSLStream);
+                    this._connectionUpgraded = true;
+                    return this._SSLStream;
+                }
+                return null;
+
             }
             catch (AuthenticationException e)
             {

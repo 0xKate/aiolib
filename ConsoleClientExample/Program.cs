@@ -41,6 +41,8 @@ namespace ConsoleProgram
                 client.ConnClosedEvent.OnEvent += OnDisconnectCallback;
                 client.RecvEvent.OnEvent += OnReceiveCallback;
                 client.ConnErrorEvent.OnEvent += OnExceptionCallback;
+                client.SslInitdEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"SSL Initialized with Server {eventArgs.Conn.RemoteEndPoint}");
+                client.RecvWaitEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Waiting to receive with Server {eventArgs.Conn.RemoteEndPoint}");
                 client.Run();
 
                 while (running)
@@ -56,6 +58,10 @@ namespace ConsoleProgram
                     if (userInput == "restart")
                     {
                         client.Run();
+                    }
+                    if (userInput == "test")
+                    {
+                        client.ServerConnection.SendData("Test Data");
                     }
                     else
                     {

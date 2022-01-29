@@ -34,8 +34,8 @@ namespace aiolib
             SHA1 sha1 = SHA1.Create();
             string digest = String.Empty;
 
-            IPEndPoint remoteEnd = (IPEndPoint)client.ClientSocket.Client.RemoteEndPoint;
-            IPEndPoint localEnd = (IPEndPoint)client.ClientSocket.Client.LocalEndPoint;
+            IPEndPoint? remoteEnd = (IPEndPoint?)client.ClientSocket.Client.RemoteEndPoint;
+            IPEndPoint? localEnd = (IPEndPoint?)client.ClientSocket.Client.LocalEndPoint;
 
             byte[] localbytes = Encoding.UTF8.GetBytes(localEnd.ToString());
             byte[] remotebytes = Encoding.UTF8.GetBytes(remoteEnd.ToString());
@@ -100,15 +100,26 @@ namespace aiolib
             var certificate = certRequest.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddDays(365));
 
             // export the private key
-            var privateKey = Convert.ToBase64String(rsa.ExportRSAPrivateKey(), Base64FormattingOptions.InsertLineBreaks);
+            var privateKey1 = Convert.ToBase64String(rsa.ExportRSAPrivateKey(), Base64FormattingOptions.InsertLineBreaks);
 
-            File.WriteAllText(keyFilename, KEY_HEADER + privateKey + KEY_FOOTER);
+            File.WriteAllText("rsa.key", KEY_HEADER + privateKey1 + KEY_FOOTER);
+
+            //var privateKey2 = Convert.ToBase64String(rsa.ExportPkcs8PrivateKey(), Base64FormattingOptions.InsertLineBreaks);
+
+            //File.WriteAllText("pkcs.key", KEY_HEADER + privateKey2 + KEY_FOOTER);
 
             // Export the certificate
-            var exportData = certificate.Export(X509ContentType.Cert);
+            var exportData1 = certificate.Export(X509ContentType.Cert);
 
-            var crt = Convert.ToBase64String(exportData, Base64FormattingOptions.InsertLineBreaks);
-            File.WriteAllText(certFilename, CRT_HEADER + crt + CRT_FOOTER);
+            var crt1 = Convert.ToBase64String(exportData1, Base64FormattingOptions.InsertLineBreaks);
+
+            File.WriteAllText("rsa.crt", CRT_HEADER + crt1 + CRT_FOOTER);
+
+            //var exportData2 = certificate.Export(X509ContentType.Pkcs7);
+
+            //var crt2 = Convert.ToBase64String(exportData2, Base64FormattingOptions.InsertLineBreaks);
+
+            //File.WriteAllText("x509.Pkcs7", CRT_HEADER + crt2 + CRT_FOOTER);
         }
     }
 }

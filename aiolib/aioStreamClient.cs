@@ -37,13 +37,13 @@ namespace aiolib
         //public ObservableCollection<Connection> Connections { get { return _Connections; } private set { _Connections = value; } }
         //internal ObservableCollection<Connection> _Connections = new ObservableCollection<Connection>();
         public bool EnableSSL { get; set; }
-        internal Connection? ServerConnection;
+        public Connection? ServerConnection;
         internal int Port { get; }
         internal string HostName { get; }
         private bool _receiving = false;
         public aioStreamClient(int port, string hostname)
         {
-            this.EnableSSL = false;
+            this.EnableSSL = true;
             this.Port = port;
             this.HostName = hostname;
         }

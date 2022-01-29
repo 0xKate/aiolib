@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 
@@ -37,7 +38,13 @@ namespace aiolib
         public aioStreamServer(int listenPort, IPAddress listenAddress)//, string certificate_loc) // SSL
         {
             //ServerCertificate = X509Certificate.CreateFromCertFile("test.crt");
-            EnableSSL = false;
+            string pass = Guid.NewGuid().ToString();
+            X509Certificate ServerCertificate_temp = X509Certificate2.CreateFromPemFile("rsa.crt", "rsa.key");
+            ServerCertificate = new X509Certificate2(ServerCertificate_temp.Export(X509ContentType.Pfx, pass), pass);
+            
+
+            //ServerCertificate = X509Certificate2.create
+            EnableSSL = true;
             ignoreHandshake = true;
             _Blacklist = new List<IPAddress>();
             ConnectedClients = new ObservableCollection<RemoteHost>();
@@ -216,12 +223,31 @@ namespace aiolib
                         ConnectedClientsLock = false;
 
                         // A client has been accepted, we can start the asyncronous receive loop Task
-                        await remoteClient.SendDataAsync(digest);
+                        
 
                         if (EnableSSL)
                         {
-                            await remoteClient.SSLUpgradeAsServerAsync(this.ServerCertificate);
-                            await HandleClientAsyncTask(remoteClient);
+                            Task<SslStream?> sslUpgradeTask = remoteClient.SSLUpgradeAsServerAsync(this.ServerCertificate);
+                            Console.WriteLine("Created sslUpgradeTask");
+                            Task sendDigestTask = remoteClient.SendDataAsync(digest);
+                            Console.WriteLine("Created sendDigestTask");
+                            await sendDigestTask;
+                            Console.WriteLine("sendDigestTask finished");
+                            // Failing here
+                            SslStream? ssl = await sslUpgradeTask;
+                            
+                            Console.WriteLine("sslUpgradeTask finished");
+                            if (ssl != null)
+                            {
+                                Console.WriteLine("SSL NOT NULL");
+
+                                //await remoteClient.SendDataAsync("SSL UPGRADED");
+                                await remoteClient._SSLWriter.WriteLineAsync("SSL UPGRADED");
+
+                                await HandleClientAsyncTask(remoteClient);
+                            }
+                            else
+                                Console.WriteLine("SSL Init FAILED");
                         }
                         else
                         {
@@ -253,7 +279,7 @@ namespace aiolib
             }
             catch (Exception err)
             {
-                Console.WriteLine("Unhandled exception in WaitForHandshake: " + err.Message);
+                Console.WriteLine("Unhandled exception in WaitForHandshake: " + err);
                 //throw;
             }
             finally
