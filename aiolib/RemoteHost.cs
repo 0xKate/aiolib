@@ -20,31 +20,31 @@ namespace aiolib
         /// <summary>A reference to the underlying <typeparamref name="TcpClient"/></summary>>
         internal TcpClient ClientSocket { get; }
         ///<summary> The remote EndPoint. Can be converted to string to represent the remote connection as  IP:port .</summary>
-        public IPEndPoint RemoteEndPoint { get; }
+        public IPEndPoint? RemoteEndPoint { get; }
         /// <summary>An <typeparamref name="IPHostEntry"/> that contains the IP address and hostname of the remote socket.</summary>>
-        public IPHostEntry RemoteHostname { get; }
+        public IPHostEntry? RemoteHostname { get; }
         /// <summary>Returns true if the socket is still connected.</summary>>
         public bool IsConnected { get { return this.ClientSocket.Connected; } }
         #region Stream
         /// <summary>If connection is using SSL this will return a <typeparamref name="SslStream"/> otherwise it will return a <typeparamref name="NetworkStream"/>.</summary>>
-        public object NetStream 
+        public object? NetStream 
         {
             get
             {
                 if (this._connectionUpgraded)
-                    return (SslStream)_SSLStream;
+                    return _SSLStream;
                 else
-                    return (NetworkStream)_Stream;
+                    return _Stream;
             }
         }
         internal NetworkStream _Stream;
-        internal SslStream _SSLStream;
+        internal SslStream? _SSLStream;
         #endregion
         #region StreamReader
         /// <summary>
         /// A reference to the StreamReader. This is a string based stream that handles the auto-conversion between strings, bytes, and network transport. This property will return the SSLReader if the connection has been upgraded.
         /// </summary>
-        public StreamReader Reader
+        public StreamReader? Reader
         {
             get
             {
@@ -55,13 +55,13 @@ namespace aiolib
             }
         }
         internal StreamReader _Reader;
-        internal StreamReader _SSLReader;
+        internal StreamReader? _SSLReader;
         #endregion
         #region StreamWriter
         /// <summary>
         /// A reference to the StreamWriter. This is a string based stream that handles the auto-conversion between strings, bytes, and network transport.  This property will return the SSLWriter if the connection has been upgraded.
         /// </summary>
-        public StreamWriter Writer
+        public StreamWriter? Writer
         {
             get
             {
@@ -72,7 +72,7 @@ namespace aiolib
             }
         }
         internal StreamWriter _Writer;
-        internal StreamWriter _SSLWriter;
+        internal StreamWriter? _SSLWriter;
         #endregion
         /// <summary>Used internally to cancel the await on the StreamReader to more gracefully terminate clients.</summary> 
         public CancellationTokenSource ReaderTokenSource { get; }
@@ -85,30 +85,33 @@ namespace aiolib
         /// <summary>Returns true if the connection has been upgraded to SSL.</summary>
         public bool ConnectionUpgraded { get { return _connectionUpgraded; } }
         private bool _connectionUpgraded = false;
+        private bool _sslCappable;
         /// <summary>
         /// A container/wrapper for TcpClient and multiple handles to Unmanaged resources. As well as high level functions for interacting with the remote client and data stream.
         /// </summary>
         /// <param name="tcpClient">Pass the TcpClient obtained by the TcpListener.AcceptAsync to this to wrap it as a RemoteHost.</param>
+        /// <param name="Hostname"> Some Text</param>
         /// <exception cref="ApplicationException"> Will throw an exception if we fail to obtain the EndPoint from the TcpClient.</exception>
-        public RemoteHost(TcpClient tcpClient, IPHostEntry RemoteHostname=null)
+        public RemoteHost(TcpClient tcpClient, IPHostEntry? Hostname=null)
         {
-            this.RemoteHostname = RemoteHostname;
+            if (Hostname != null)
+                this._sslCappable = true;
+            else
+                this._sslCappable = false;
 
-            ClientSocket = tcpClient;
-            RemoteEndPoint = (IPEndPoint)tcpClient.Client.RemoteEndPoint;
-            if (RemoteEndPoint == null)
-            {
+            this.ClientSocket = tcpClient;
+            this.RemoteHostname = Hostname;            
+
+            var ep = (IPEndPoint?)tcpClient.Client.RemoteEndPoint;
+            if (ep == null)
                 throw new ApplicationException("Tried to create a RemoteHost, but the underlying socket has closed.");
-            }
+            RemoteEndPoint = ep;
 
             ReaderTokenSource = new CancellationTokenSource();
             ReaderToken = ReaderTokenSource.Token;
 
             // Get the network stream from the tcpClient (Used for reading/writing bytes over the network)
             _Stream = ClientSocket.GetStream();
-
-            // SSL Todo: Add SSL authentication and upgrade network stream to SSLStream
-            //SslStream sslStream = new SslStream(networkStream);
 
             // Get a stream writer from the network stream (Used for writing strings over the network)
             _Writer = new StreamWriter(_Stream);
@@ -142,26 +145,16 @@ namespace aiolib
         {
             Task SendTask = SendDataAsync(message);
         }
-        private void DisplayCertificateInformation(SslStream stream)
+        private void DisplayCertificateInformation()
         {
-            Console.WriteLine("Certificate revocation list checked: {0}", stream.CheckCertRevocationStatus);
-            Console.WriteLine($"HandleClientAsyncTask finished without crashing");
+            if (this._SSLStream == null)
+            {
+                return;
+            }    
+            Console.WriteLine("Certificate revocation list checked: {0}", this._SSLStream.CheckCertRevocationStatus);
 
-            X509Certificate localCertificate = stream.LocalCertificate;
-            if (stream.LocalCertificate != null)
-            {
-                Console.WriteLine("Local cert was issued to {0} and is valid from {1} until {2}.",
-                    localCertificate.Subject,
-                    localCertificate.GetEffectiveDateString(),
-                    localCertificate.GetExpirationDateString());
-            }
-            else
-            {
-                Console.WriteLine("Local certificate is null.");
-            }
-            // Display the properties of the client's certificate.
-            X509Certificate remoteCertificate = stream.RemoteCertificate;
-            if (stream.RemoteCertificate != null)
+            X509Certificate? remoteCertificate = this._SSLStream.RemoteCertificate;
+            if (remoteCertificate != null)
             {
                 Console.WriteLine("Remote cert was issued to {0} and is valid from {1} until {2}.",
                     remoteCertificate.Subject,
@@ -169,24 +162,35 @@ namespace aiolib
                     remoteCertificate.GetExpirationDateString());
             }
             else
+                Console.WriteLine("Remote certificate is null!");
+
+            X509Certificate? localCertificate = this._SSLStream.LocalCertificate;
+            if (localCertificate != null)
             {
-                Console.WriteLine("Remote certificate is null.");
+                Console.WriteLine("Local cert was issued to {0} and is valid from {1} until {2}.",
+                    localCertificate.Subject,
+                    localCertificate.GetEffectiveDateString(),
+                    localCertificate.GetExpirationDateString());
             }
         }
-        private bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        private bool ValidateServerCertificate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
         {
+            if (certificate == null)
+                return false;
+
             if (sslPolicyErrors == SslPolicyErrors.None)
                 return true;
-            Console.WriteLine("Certificate error: {0}", sslPolicyErrors);
-            // Do not allow this client to communicate with unauthenticated servers.
+            else // Do not allow this client to communicate with unauthenticated servers.
+            {
+                Console.WriteLine("Certificate error: {0}", sslPolicyErrors);
 
-
-            Console.WriteLine($"Certificate Subject {certificate.Subject}");
-
-            return true;
-            //DisplayCertificateInformation(this._SSLStream);
-
-             return false;
+                if (this._SSLStream != null)
+                    if (this._SSLStream.IsAuthenticated)
+                    {
+                        DisplayCertificateInformation();
+                    }                
+                return false;
+            }
         }
         /// <summary> Authenticates the SSL connection as a client, verifies the server certificate but not client. </summary>
         /// <param name="RemoteHostInfo">Contains the IPAddress and hostname of the remote host.</param>
@@ -195,7 +199,7 @@ namespace aiolib
         public async Task<SslStream?> SSLUpgradeAsClientAsync(IPHostEntry RemoteHostInfo)
         {
             //IsEncrypted and IsSigned properties to determine what security services are used by the SslStream. Check the IsMutuallyAuthenticated property
-            X509Store store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
+            X509Store store = new(StoreName.My, StoreLocation.LocalMachine);
             store.Open(OpenFlags.ReadOnly);
             this._SSLStream = new SslStream(this._Stream, false, new RemoteCertificateValidationCallback(ValidateServerCertificate), null);
             try
@@ -216,8 +220,7 @@ namespace aiolib
                     //if (!_SSLStream.IsMutuallyAuthenticated)
                     //    throw new AuthenticationException("Stream not Mutually Authenticated!");
 
-                    _SSLWriter = new StreamWriter(_SSLStream);
-                    _SSLWriter.AutoFlush = true;
+                    _SSLWriter = new StreamWriter(_SSLStream) { AutoFlush = true };
                     _SSLReader = new StreamReader(_SSLStream);
                     _connectionUpgraded = true;
                     return _SSLStream;
@@ -236,7 +239,7 @@ namespace aiolib
         }
         /// <param name="serverCertificate">The X509Certificate being used to verify the server.</param>
         /// <returns></returns>
-        /// <inheritdoc cref="SslStream.AuthenticateAsServerAsync"/>
+        /// <inheritdoc cref="SslStream.AuthenticateAsServerAsync(X509Certificate, bool, bool)"/>
         public async Task<SslStream?> SSLUpgradeAsServerAsync(X509Certificate serverCertificate)
         {
             //Console.WriteLine("Trying to create sslStream");
@@ -282,7 +285,10 @@ namespace aiolib
         /// <inheritdoc cref="object.ToString"/>
         public override string ToString()
         {
-            return this.RemoteEndPoint.ToString();
+            if (this.RemoteEndPoint == null)
+                return string.Empty;
+            else
+                return this.RemoteEndPoint.ToString();
         }
         /// <summary>
         /// Close the connection and start to close all handles to assosicated resources.
