@@ -37,9 +37,11 @@ namespace ConsoleProgram
                 bool running = true;
 
                 aioStreamClient client = new aioStreamClient(port, hostname);
+                client.ConnReadyEvent.OnEvent += (sender, eventArgs) => eventArgs.Conn.SendData($"Hello from {client.ServerConnection.LocalEndPoint}");
+                client.RecvEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Received data {eventArgs.Message} from server {client.ServerConnection.RemoteEndPoint}");
                 client.ConnReadyEvent.OnEvent += OnConnectCallback;
                 client.ConnClosedEvent.OnEvent += OnDisconnectCallback;
-                client.RecvEvent.OnEvent += OnReceiveCallback;
+                client.RecvEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Received data {eventArgs.Message} from server {client.ServerConnection.RemoteEndPoint}");
                 client.ConnErrorEvent.OnEvent += OnExceptionCallback;
                 client.SslInitdEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"SSL Initialized with Server {eventArgs.Conn.RemoteEndPoint}");
                 client.RecvWaitEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Waiting to receive with Server {eventArgs.Conn.RemoteEndPoint}");
