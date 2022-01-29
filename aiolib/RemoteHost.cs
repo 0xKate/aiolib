@@ -284,16 +284,17 @@ namespace aiolib
             // Cleanup Resources that are done with.
             Reading = false;
 
-            _Reader.Close();
-            _Writer.Close();
-            _Stream.Close();
-
             if (_SSLReader != null)
                 _SSLReader.Close();
             if (_SSLWriter != null)
-                _SSLWriter.Close();
+                _SSLWriter.Close();            
+
+            _Reader.Close();
+            _Writer.Close();
+
             if (_SSLStream != null)
                 _SSLStream.Close();
+            _Stream.Close();                
 
             ClientSocket.Close();
 
@@ -306,22 +307,19 @@ namespace aiolib
         protected virtual void Dispose(bool disposing)
         {
             if (_disposed)
-                return;
-            
+                return;           
 
             if (disposing)
             {
+                ReaderTokenSource.Cancel();
 
-                _Stream.Dispose();
-                _Reader.Dispose();
-                _Writer.Dispose();
+                _SSLReader.DiscardBufferedData();
+                _Reader.DiscardBufferedData();
 
-                if (_SSLWriter != null)
-                    _SSLWriter.Dispose();
-                if (_SSLStream != null)
-                    _SSLStream.Dispose();
                 if (_SSLReader != null)
                     _SSLReader.Dispose();
+                if (_Reader != null)
+                    _Reader.Dispose();
 
                 ReaderTokenSource.Dispose();
 
@@ -334,22 +332,26 @@ namespace aiolib
             // Free any unmanaged objects here.
             if (ClientSocket != null)
                 ClientSocket.Dispose();
-            _disposed = true;
 
+            _disposed = true;
         }
-        /*
         internal async Task DisposeAsync()
         {
-            await _Stream.DisposeAsync();
+            if (_disposed)
+                return;
+
+            await _SSLWriter.DisposeAsync();
+            await _Writer.DisposeAsync();
             await _SSLStream.DisposeAsync();
+            await _Stream.DisposeAsync();            
+            Dispose(true);
         }
-        */
         /// <summary>
         /// Release all remaining resources for garbage collection.
         /// </summary>
         public void Dispose()
         {
-            Dispose(true);
+            Task DisposeTask = DisposeAsync();
             GC.SuppressFinalize(this);
         }
     }
