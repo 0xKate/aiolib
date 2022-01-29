@@ -27,3 +27,5 @@ See the samples for in-depth examples on how to utilize the library for now.
     // Run this without await to start the tasks and continue to the next line. Run with await in an asyncronous enviroment.
     client.Run();
 ``
+
+![image](https://user-images.githubusercontent.com/94711905/151676330-e1c4262e-8059-49b0-b5fb-7354a9a979e7.png)
