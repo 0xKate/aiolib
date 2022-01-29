@@ -212,7 +212,7 @@ namespace aiolib
                     }
                     else
                     {
-                        Console.WriteLine($"{readerTask.Result} == {digest}");
+                        //Console.WriteLine($"{readerTask.Result} == {digest}");
                         handshakeFailed = false;
                     }
 
@@ -234,21 +234,21 @@ namespace aiolib
                         if (EnableSSL)
                         {
                             Task<SslStream?> sslUpgradeTask = remoteClient.SSLUpgradeAsServerAsync(this.ServerCertificate);
-                            Console.WriteLine("Created sslUpgradeTask");
+                            //Console.WriteLine("Created sslUpgradeTask");
                             Task sendDigestTask = remoteClient.SendDataAsync(digest);
-                            Console.WriteLine("Created sendDigestTask");
+                            //Console.WriteLine("Created sendDigestTask");
                             await sendDigestTask;
-                            Console.WriteLine("sendDigestTask finished");
+                            //Console.WriteLine("sendDigestTask finished");
                             // Failing here
                             SslStream? ssl = await sslUpgradeTask;
                             
-                            Console.WriteLine("sslUpgradeTask finished");
+                            //Console.WriteLine("sslUpgradeTask finished");
                             if (ssl != null)
                             {
-                                Console.WriteLine("SSL NOT NULL");
+                                //Console.WriteLine("SSL NOT NULL");
 
-                                //await remoteClient.SendDataAsync("SSL UPGRADED");
-                                await remoteClient._SSLWriter.WriteLineAsync("SSL UPGRADED");
+                                await remoteClient.SendDataAsync("SSL UPGRADED");
+                                //await remoteClient._SSLWriter.WriteLineAsync("SSL UPGRADED");
 
                                 await HandleClientAsyncTask(remoteClient);
                             }

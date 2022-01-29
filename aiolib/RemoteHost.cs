@@ -231,9 +231,9 @@ namespace aiolib
         }
         public async Task<SslStream?> SSLUpgradeAsServerAsync(X509Certificate serverCertificate)
         {
-            Console.WriteLine("Trying to create sslStream");
+            //Console.WriteLine("Trying to create sslStream");
             this._SSLStream = new SslStream(this._Stream, false);
-            Console.WriteLine("Created sslStream instance");
+            //Console.WriteLine("Created sslStream instance");
             // Authenticate the server but don't require the client to authenticate.
             try
             {

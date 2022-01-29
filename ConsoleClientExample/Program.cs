@@ -41,7 +41,6 @@ namespace ConsoleProgram
                 client.RecvEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Received data {eventArgs.Message} from server {client.ServerConnection.RemoteEndPoint}");
                 client.ConnReadyEvent.OnEvent += OnConnectCallback;
                 client.ConnClosedEvent.OnEvent += OnDisconnectCallback;
-                client.RecvEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Received data {eventArgs.Message} from server {client.ServerConnection.RemoteEndPoint}");
                 client.ConnErrorEvent.OnEvent += OnExceptionCallback;
                 client.SslInitdEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"SSL Initialized with Server {eventArgs.Conn.RemoteEndPoint}");
                 client.RecvWaitEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Waiting to receive with Server {eventArgs.Conn.RemoteEndPoint}");
