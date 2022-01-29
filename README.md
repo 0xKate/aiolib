@@ -7,7 +7,7 @@ See the samples for in-depth examples on how to utilize the library for now.
 # Basic Usage
 
 ## Server
-``` 
+```csharp
   // Create an instance of the StreamServer  
   aioStreamServer server = new aioStreamServer(port, ipAddress);
   // Hook into the OnReceiveEvent and echo back what we received. (Simple echo server in 1 line)
@@ -17,7 +17,7 @@ See the samples for in-depth examples on how to utilize the library for now.
 ```
 
 ## Client
-```
+```csharp
     // Create an instance of the StreamClient
     aioStreamClient client = new aioStreamClient(port, hostname);
     // Subscribe to the Connection Ready event and send a hello message
