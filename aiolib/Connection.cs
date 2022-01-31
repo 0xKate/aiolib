@@ -10,41 +10,69 @@ using System.Net.Sockets;
 
 namespace aiolib
 {
-    public interface IConnectionEvent
+
+    public class ConnectionException : Exception
     {
-        public event EventHandler<ConnectionEventArgs> OnEvent;
+        public ConnectionException() { }
+        public ConnectionException(string message) : base(message) { }
+        public ConnectionException(string message, Exception inner) : base(message, inner) { }
     }
     public class ConnectionEventArgs : EventArgs
     {
-        public Connection? Conn;
+        public Connection? Connection;
         public String? Message;
-        public ConnectionEventArgs(Connection? connection, string? message = null)
+        public ConnectionEventArgs(Connection? Connection, string? Message = null)
         {
-            this.Conn = connection;
-            this.Message = message;
+            this.Connection = Connection;
+            this.Message = Message;
         }
     }
-    public class ConnectionEvent : IConnectionEvent
+    public class ConnectionEvent
     {
         public event EventHandler<ConnectionEventArgs> OnEvent;
         public void Raise(Connection? connection, string? message = null)
         {
-            // Do something here before the event…  
-
             OnEventRaised(new ConnectionEventArgs(connection, message));
-
-            // or do something here after the event.
         }
-        protected virtual void OnEventRaised(ConnectionEventArgs e)
+        protected virtual void OnEventRaised(ConnectionEventArgs eventArgs)
         {
-            OnEvent?.Invoke(this, e);
+            try
+            {
+                OnEvent?.Invoke(this, eventArgs);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+        }        
+        internal virtual void Clear()
+        {
+            try
+            {
+                if (this.OnEvent != null)
+                    foreach (var _delegate in this.OnEvent.GetInvocationList())
+                    {
+                        Console.WriteLine("Clearing out connection delegates.");
+                        if (_delegate != null)
+                            this.OnEvent -= (EventHandler<ConnectionEventArgs>)_delegate;
+                    }
+                else
+                    Console.WriteLine("OnEvent was Null...");
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+
         }
     }
 
     public class Connection : IDisposable
     {
-        public bool EnableSSL { get; }
-        public IPEndPoint RemoteEndPoint { get { return _Connection.RemoteEndPoint; } }
+        
+        public bool IsSSLEstablished { get; }
+        public IPEndPoint? RemoteEndPoint { get { return _Connection.RemoteEndPoint; } }
         public IPEndPoint? LocalEndPoint { get { return (IPEndPoint?)_Connection.ClientSocket.Client.LocalEndPoint; } }
         public bool IsConnected { get { return this._Connection.ClientSocket.Connected; } }
         internal RemoteHost _Connection;
@@ -52,9 +80,10 @@ namespace aiolib
         private bool _disposed;
         public bool _blockSend = false;
         public bool BlockSend { get { return _blockSend; } set { _blockSend = false; } }
+        internal ConnectionEvent SendEvent = new();
         public override string ToString()
         {
-            return this.RemoteEndPoint.ToString();
+            return this._Connection.ToString();
         }
         public Connection(string hostname, int port)
         {
@@ -70,7 +99,6 @@ namespace aiolib
         }
         public Connection(TcpClient tcpClient, IPHostEntry hostname)
         {
-            EnableSSL = true;
             if (hostname == null)
                 throw new ArgumentNullException("SSL Requires the hostname of the remote machine.");
             this._Connection = new RemoteHost(tcpClient, hostname);
@@ -109,7 +137,10 @@ namespace aiolib
         public void SendData(string data)
         {
             if (!_blockSend)
+            {
                 this._Connection.SendData(data);
+                SendEvent.Raise(this, $"Client: {this} - Sent Data: '{data}'");
+            }
         }
         public void Close()
         {
@@ -119,8 +150,12 @@ namespace aiolib
         }
         public void Dispose()
         {
-            if (!this._disposed)
-                this._Connection.Dispose();
+            if (this._disposed)
+                return;
+
+            SendEvent.Clear();
+
+            this._Connection.Dispose();
             this._disposed = true;
         }
     }

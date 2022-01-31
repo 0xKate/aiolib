@@ -9,27 +9,29 @@ namespace ConsoleProgram
     {
         static void OnConnectCallback(object? sender, ConnectionEventArgs eventArgs)
         {
-            if (eventArgs.Conn != null)
-                Console.WriteLine($"Connected to server {eventArgs.Conn.RemoteEndPoint}");
+            if (eventArgs.Connection != null)
+                Console.WriteLine($"Client: Connected to server {eventArgs.Connection.RemoteEndPoint}");
         }
         static void OnDisconnectCallback(object? sender, ConnectionEventArgs eventArgs)
         {
-            if (eventArgs.Conn != null)
-                Console.WriteLine($"Disconnected from server {eventArgs.Conn.RemoteEndPoint}");
+            if (eventArgs.Connection != null)
+                Console.WriteLine($"Client: Disconnected from server {eventArgs.Connection.RemoteEndPoint}");
         }
         static void OnReceiveCallback(object? sender, ConnectionEventArgs eventArgs)
         {
-            if (eventArgs.Conn != null)
-                Console.WriteLine($"Server {eventArgs.Conn.RemoteEndPoint} has sent data: {eventArgs.Message}");
+            if (eventArgs.Connection != null)
+                Console.WriteLine($"Server {eventArgs.Connection.RemoteEndPoint} has sent data: {eventArgs.Message}");
         }
         static void OnExceptionCallback(object? sender, ConnectionEventArgs eventArgs)
         {
-            if (eventArgs.Conn != null)
-                Console.WriteLine($"Server {eventArgs.Conn.RemoteEndPoint} has caused exception: {eventArgs.Message}");
+            if (eventArgs.Connection != null)
+                Console.WriteLine($"Server {eventArgs.Connection.RemoteEndPoint} has caused exception: {eventArgs.Message}");
         }
 
         static void Main(string[] args)
         {
+            Console.WriteLine("You may type dirrectly into this window to send commands.");
+
             try
             {
                 int port = 1025;
@@ -37,18 +39,22 @@ namespace ConsoleProgram
                 bool running = true;
 
                 aioStreamClient client = new aioStreamClient(port, hostname);
-                client.ConnReadyEvent.OnEvent += (sender, eventArgs) => eventArgs.Conn.SendData($"Hello from {client.ServerConnection.LocalEndPoint}");
-                client.RecvEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Received data {eventArgs.Message} from server {client.ServerConnection.RemoteEndPoint}");
-                client.ConnReadyEvent.OnEvent += OnConnectCallback;
-                client.ConnClosedEvent.OnEvent += OnDisconnectCallback;
-                client.ConnErrorEvent.OnEvent += OnExceptionCallback;
-                client.SslInitdEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"SSL Initialized with Server {eventArgs.Conn.RemoteEndPoint}");
-                client.RecvWaitEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Waiting to receive with Server {eventArgs.Conn.RemoteEndPoint}");
+                client.ConnReadyEvent.OnEvent += (sender, eventArgs) => eventArgs.Connection.SendData($"Hello from {client.ServerConnection.LocalEndPoint}");
+                client.RecvEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Server: Received data <{eventArgs.Message}' from server <{client.ServerConnection}>");
+                client.ConnReadyEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Client: Connection with <{client.ServerConnection}> is ready.");
+                client.ConnClosedEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Client: Connection with <{client.ServerConnection}> has closed.");
+                client.ConnErrorEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Client: Connection with <{client.ServerConnection}> has errors ready.");
+                client.SslInitdEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Client: SSL Initialized with Server <{eventArgs.Connection}>");
+                client.RecvWaitEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Client: Waiting to receive with Server <{eventArgs.Connection}>");
+                client.SendEvent.OnEvent += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+                //client.SslInitdEvent.OnEvent += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+                //client.TcpInitdEvent.OnEvent += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+                client.HandshakeInitdEvent.OnEvent += (sender, eventArgs) => Console.WriteLine("Client: " + eventArgs.Message);
                 client.Run();
 
                 while (running)
                 {
-                    Console.Write("Enter Message: ");
+                    Console.Write(String.Empty);
                     var userInput = Console.ReadLine();
 
                     if (userInput == "Exit")

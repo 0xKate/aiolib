@@ -13,122 +13,186 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace aiolib
 {
-    public class ConnectionException : Exception
+
+    public class ServerException : Exception
     {
-        public ConnectionException()
-        {
-        }
+        public ServerException() { }
+        public ServerException(string message) : base(message) { }
+        public ServerException(string message, Exception inner) : base(message, inner) { }
+    }
 
-        public ConnectionException(string message)
-            : base(message)
+    public class ServerEventArgs : EventArgs
+    {
+        public aioStreamServer? Server;
+        public String? Message;
+        public ServerEventArgs(aioStreamServer? Server, string? Message = null)
         {
+            this.Server = Server;
+            this.Message = Message;
         }
-
-        public ConnectionException(string message, Exception inner)
-            : base(message, inner)
+    }
+    public class ServerEvent
+    {
+        public event EventHandler<ServerEventArgs> OnEvent;
+        public void Raise(aioStreamServer? server, string? message = null)
         {
+            OnEventRaised(new ServerEventArgs(server, message));
+        }
+        protected virtual void OnEventRaised(ServerEventArgs e)
+        {
+            OnEvent?.Invoke(this, e);
         }
     }
 
     public class aioStreamServer
     {
+
+        #region Properties
         /// <summary>
         /// List to keep track of connected clients.
         /// Note: To obvserve this from WPF, while the server is in a background thread, use the following line of code from the observing thread:  
         /// [private object lockObject = new object();], 
         /// [BindingOperations.EnableCollectionSynchronization(StreamServer.ConnectedClients, lockObject);]
         /// </summary>
-        public ObservableCollection<RemoteHost> ConnectedClients { get; }
-        /// Used in-case outside insertions or deletions to the ConnectedClients need to be made. If so, please respect the lock.
-        public bool ConnectedClientsLock = false;
-        //public Authorization auth;
-        /// <summary>
-        /// Set to falseif you only want clients who follow our specific handshake to connect.
-        /// </summary>
-        public bool EnableSSL { get; set; }
-        public bool ignoreHandshake { get; set; }
-        private List<IPAddress> _Blacklist;
-        public List<IPAddress> Blacklist { get { return _Blacklist; } }
-        public ClientEvents ClientEventsPublisher { get; }
-        public ServerEvents ServerEventsPublusher { get; }
-        public bool ServerRunning { get; set; }
-        private int Port { get; }
-        private IPAddress IpAddress { get; }
-        private CancellationTokenSource ListenTokenSource { get; }
-        private CancellationToken ListenToken { get; }
-        public X509Certificate ServerCertificate { get; private set; }
-
-        private TcpListener listener;
-        public aioStreamServer(int listenPort, IPAddress listenAddress)//, string certificate_loc) // SSL
+        public ObservableCollection<Connection> ConnectedClients { get; }
+        public Object ConnectedClientsLock = new Object();
+        private Boolean IgnoreHandshake { get; }
+        private Boolean EnableSSL { get; }
+        private List<IPAddress> Blacklist { get; }
+        private Int32 ListenPort { get; }
+        private IPAddress ListenIp { get; }
+        private X509Certificate? ServerCertificate { get; }
+        private TcpListener ServerListener { get; }
+        private Task? MainTask { get; set; }
+        private CancellationTokenSource ListenTokenSource { get; set; }
+        private CancellationToken ListenToken { get; set; }
+        private Boolean ServerListening { get; set; }
+        private Boolean _Started = false;
+        private Boolean _Stopped = true;
+        public ServerEvents Events { get; }
+        #endregion
+        public aioStreamServer(IPAddress listenIp, Int32 listenPort, Boolean ignoreHandshake = false, Boolean enableSSL = true)
         {
-            //ServerCertificate = X509Certificate.CreateFromCertFile("test.crt");
-            string pass = Guid.NewGuid().ToString();
-            X509Certificate ServerCertificate_temp = X509Certificate2.CreateFromPemFile("rsa.crt", "rsa.key");
-            ServerCertificate = new X509Certificate2(ServerCertificate_temp.Export(X509ContentType.Pfx, pass), pass);
-            
+            // Create default instances
+            this.ServerListener = new TcpListener(listenIp, listenPort);
+            this.Blacklist = new List<IPAddress>();
+            this.ConnectedClients = new ObservableCollection<Connection>();
+            this.Events = new ServerEvents();
 
-            //ServerCertificate = X509Certificate2.create
-            EnableSSL = true;
-            ignoreHandshake = true;
-            _Blacklist = new List<IPAddress>();
-            ConnectedClients = new ObservableCollection<RemoteHost>();
-            ClientEventsPublisher = new ClientEvents();
-            ServerEventsPublusher = new ServerEvents();
-            ServerRunning = true;
-            Port = listenPort;
-            IpAddress = listenAddress;
+            // Initializer arguments
+            this.ListenPort = listenPort;
+            this.ListenIp = listenIp;
+            this.EnableSSL = enableSSL;
+            this.IgnoreHandshake = ignoreHandshake;
 
-            ListenTokenSource = new CancellationTokenSource();
-            ListenToken = ListenTokenSource.Token;
-
-            //ServerEventsPublusher.initialized.Raise(this);
-
-            // SSL
-            //serverCertificate = X509Certificate.CreateFromCertFile(certificate_loc);
-        }
-        public bool BlacklistIP(IPAddress ipAddress)
-        {
-            if (this._Blacklist.Contains(ipAddress))
+            if (this.EnableSSL == true)
             {
-                return false;
+                // Generate random password out of random Guid
+                string pass = Guid.NewGuid().ToString();
+                // Combine the output of the extension created self-signed certificate
+                X509Certificate ServerCertificate_temp = X509Certificate2.CreateFromPemFile("rsa.crt", "rsa.key");
+                // Generate temporary certificate in memory with the random password
+                this.ServerCertificate = new X509Certificate2(ServerCertificate_temp.Export(X509ContentType.Pfx, pass), pass);
+                ServerCertificate_temp.Dispose();
             }
+        }
+        public void StartListening()
+        {
+            if (_Started)
+                return;
             else
-            {
-                this._Blacklist.Add(ipAddress);
-                return true;
-            }
-        }
-        public async Task Run()
-        {
-            //High level C# api for creating socket server.
-            listener = new TcpListener(IpAddress, Port);
-            listener.Start();
-            ServerRunning = true;
+                _Started = true;
 
-            //ServerEventsPublusher.listening.Raise("Listener", );
-            // This loop is running asyncronously, it will await for new clients. The thread may do other things while awaiting.
-            while (ServerRunning)
+            if (this.MainTask == null || this.MainTask.IsCompleted == true)
+            {
+                this.MainTask = this.RunAsync();
+            }
+
+            _Stopped = false;
+        }
+        public void StopListening()
+        {
+            if (_Stopped)
+                return;
+            else
+                _Stopped = true;
+
+            if (this.MainTask != null && ServerListening)
+            {
+                this.ServerListening = false;
+                foreach (Connection ClientConnection in this.ConnectedClients)
+                {
+                    ClientConnection.Close();
+                    ClientConnection.Dispose();
+                }
+                this.ServerListener.Stop();
+                this.ListenTokenSource.Cancel();
+            }
+
+            _Started = false;
+        }
+        public void Run()
+        {
+            this.StartListening();
+        }
+        internal async Task RunAsync()
+        {
+            Events.AcceptLoopReadyEvent.Raise(this, "Server is accepting connections.");
+            await AcceptClientLoopAsync();
+            Events.AcceptLoopEndEvent.Raise(this, "Server has finished accepting connections.");
+        }
+        internal bool ClientSecurityCheck(TcpClient remoteClient, IPEndPoint remoteEnd)
+        {
+            if (remoteClient == null)
+                throw new ArgumentNullException(nameof(remoteClient));
+
+            if (Blacklist.Count > 0)
+                if (Blacklist.Any(item => item == remoteEnd.Address))
+                {
+                    return false;
+                }
+            return true;
+        }
+        internal async Task AcceptClientLoopAsync()
+        {
+            this.ListenTokenSource = new CancellationTokenSource();
+            this.ListenToken = this.ListenTokenSource.Token;
+
+            try
+            {
+                ServerListener.Start();
+                ServerListening = true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Failed to start listener: " + ex);
+                return;
+            }
+
+
+            while (ServerListening)
             {
                 try
                 {
+                    Events.AwaitAcceptEvent.Raise(this, "Server waiting for more connections.");
                     // await for new clients. The thread may do other things while awaiting.
-                    TcpClient tcpClient = await listener.AcceptTcpClientAsync(ListenToken);
+                    TcpClient tcpClient = await ServerListener.AcceptTcpClientAsync(ListenToken);
                     // Low resource Easy access to IPAddress and port right away.
-                    IPEndPoint remoteEnd = (IPEndPoint)tcpClient.Client.RemoteEndPoint;
+                    IPEndPoint? remoteEnd = (IPEndPoint?)tcpClient.Client.RemoteEndPoint;
+                    Events.TcpAcceptEvent.Raise(tcpClient, $"Client: {remoteEnd} - Opened tcp connection.");
 
+                    if (remoteEnd == null)
+                        continue;
 
-                    // The remote end should cause us to use as little resources as possible until we trust it a little more.
-                    // We can create a common handshake to ensure we are communicating with our application on the e
-
+                    // Disconnect Blocked IP's
                     bool authorized = this.ClientSecurityCheck(tcpClient, remoteEnd);
                     if (!authorized)
                     {
                         try
                         {
-                            Console.WriteLine($"Unauthorized connection attempt from {remoteEnd} @ {DateTime.Now}!");
+                            Events.UnauthorizedConnectionEvent.Raise(tcpClient, $"Client: {remoteEnd} - Disconnecting Unauthorized Client @ {DateTime.Now}");
                             tcpClient.Close();
                             tcpClient.Dispose();
-                            //tcpClient = null;
                         }
                         catch (Exception ex)
                         {
@@ -137,160 +201,105 @@ namespace aiolib
                         continue;
                     }
 
+                    // Upgrade tcpClient to connection wrapper
+                    Connection connection = new(tcpClient);
 
-                    // Upgrade to our remoteClient wrapper.
-                    RemoteHost remoteClient = new RemoteHost(tcpClient);
-
-                    // Keep track of client (Triggers ObservableCollection update)
-                    //ConnectedClientsLock = true;
-                    //ConnectedClients.Add(remoteClient);
-                    //ConnectedClientsLock = false;
-
-                    Task WaitOrTimeoutTask = WaitForHandshake(remoteClient);
-                    //Task HandleClientTask = HandleClientAsyncTask(remoteClient);
-                    //await HandleClientAsyncTask(remoteClient);
+                    // Start New task with current client and continue waiting for new clients
+                    Task WaitOrTimeoutTask = WaitForHandshakeAsync(connection);
                 }
-                catch (Exception ex)
+                catch (Exception err)
                 {
-                    Console.WriteLine($"Unexpected exception during client initialization: " + ex.Message);
+                    Console.WriteLine($"Unexpected exception during client initialization: " + err.Message);
+                    Events.ConnectionExceptionEvent.Raise(null, $"Client: null - Caused Exception:\n{err}");
                     //throw ex;
                 }
             }
+            this.ListenTokenSource.Dispose();
         }
-        public void Stop()
+        private async Task WaitForHandshakeAsync(Connection remoteClient)
         {
-            this.ServerRunning = false;
-            this.ListenTokenSource.Cancel();
-            listener.Stop();
-            foreach (RemoteHost client in ConnectedClients)
-            {
-                client.SendData("Server shutting down.");
-                client.Close();
-                client.Dispose();
-            }
-        }
-        private bool ClientSecurityCheck(TcpClient remoteClient, IPEndPoint remoteEnd)
-        {
-            if (remoteClient == null)
-                throw new ArgumentNullException(nameof(remoteClient));
-
-            //Console.WriteLine(remoteEnd.Address);
-
-            if (Blacklist.Count > 0)
-            if (Blacklist.Any(item => item == remoteEnd.Address))
-            {
-                return false;
-            }
-            return true;
-        }
-        #region SSL Notes
-
-        #endregion
-
-        private async Task WaitForHandshake(RemoteHost remoteClient)
-        {
-            if (remoteClient.Reader == null)
-                throw new ConnectionException("WaitForHandshake: ConnectionException - Null reader error.");
-            // TODO
-            //ClientEventsPublisher.connectPendingEvent.Raise(remoteClient);
+            Events.HandshakeBeginEvent.Raise(remoteClient, $"Client: {remoteClient} - Handshake Begin");
             CancellationTokenSource readLineTokenSource = new CancellationTokenSource();
             CancellationToken readLineToken = readLineTokenSource.Token;
             try
             {
                 TimeSpan timeout = TimeSpan.FromMilliseconds(5000);
-                //var task = remoteClient.Reader.ReadLineAsync().WaitAsync(timeout ,token).ConfigureAwait(false); // Requires .NET 6
-                Task<string?> readerTask = remoteClient.Reader.ReadLineAsync().CancellableTask(readLineToken);
-                //readerTask.Dis
-                //remoteClient.Reader.ReadLineAsync()
-                //Task<string> readerTask = remoteClient.Reader.ReadLineAsync().WaitAsync(timeout, token);
-                //ConfiguredTaskAwaitable<string> ConfReadTask = ReadTask.ConfigureAwait(false);
-                //var readerTask = remoteClient.Reader.ReadLineAsync();
+                Task<string?> readerTask = remoteClient.ReadLineAsync().CancellableTask(readLineToken);
                 if (await Task.WhenAny(readerTask, Task.Delay(timeout)) == readerTask)
                 {
-                    #region WithinTimeoutBlock
-                    // If the task was cancelled, this should send execution down to the finally block.
-                    //readLineToken.ThrowIfCancellationRequested();
-                    
                     bool handshakeFailed = false;
 
-                    Console.WriteLine($"Received handshake from cient {remoteClient}");                                       
+                    Events.HandshakeReceiveEvent.Raise(remoteClient, $"Client: {remoteClient} - Handshake Received");
 
-                    string digest = await remoteClient.GetClientDigest();
-
-                    //Console.WriteLine($"{task.Result} == {digest}");
+                    string digest = await remoteClient._Connection.GetClientDigest();
 
                     if (readerTask != null)
-                    if (!readerTask.IsCompletedSuccessfully)
-                    {
-                        Console.WriteLine("Task failed to complete.");
+                        if (digest != readerTask.Result)
+                            handshakeFailed = true;
+                        else
+                            handshakeFailed = false;
 
-                    }
-                    else if (digest != readerTask.Result)
-                    {
-                        Console.WriteLine($"{readerTask.Result} != {digest}");
-                        handshakeFailed = true;
-                    }
-                    else
-                    {
-                        //Console.WriteLine($"{readerTask.Result} == {digest}");
+                    if (IgnoreHandshake)
                         handshakeFailed = false;
-                    }
-
-                    if (ignoreHandshake)
-                    {
-                        handshakeFailed = false;
-                    }
 
                     if (!handshakeFailed)
                     {
+                        Events.HandshakeCompleteEvent.Raise(remoteClient, $"Client: {remoteClient} - Handshake Complete");
+
                         // Keep track of client (Triggers ObservableCollection update)
                         ConnectedClientsLock = true;
                         ConnectedClients.Add(remoteClient);
                         ConnectedClientsLock = false;
 
-                        // A client has been accepted, we can start the asyncronous receive loop Task
-                        
-
+                        // Attempt SSL Upgrade
                         if (EnableSSL)
                         {
-                            Task<SslStream?> sslUpgradeTask = remoteClient.SSLUpgradeAsServerAsync(this.ServerCertificate);
-                            //Console.WriteLine("Created sslUpgradeTask");
+                            if (this.ServerCertificate == null)
+                            {
+                                throw new ServerException("SSL Requires an X509Certificate ! - Null certificate error.");
+                            }
+
+                            Task<SslStream?> sslUpgradeTask = remoteClient._Connection.SSLUpgradeAsServerAsync(this.ServerCertificate);
                             Task sendDigestTask = remoteClient.SendDataAsync(digest);
-                            //Console.WriteLine("Created sendDigestTask");
                             await sendDigestTask;
-                            //Console.WriteLine("sendDigestTask finished");
-                            // Failing here
                             SslStream? ssl = await sslUpgradeTask;
-                            
-                            //Console.WriteLine("sslUpgradeTask finished");
+
                             if (ssl != null)
                             {
-                                //Console.WriteLine("SSL NOT NULL");
-
-                                await remoteClient.SendDataAsync("SSL UPGRADED");
-                                //await remoteClient._SSLWriter.WriteLineAsync("SSL UPGRADED");
-
-                                await HandleClientAsyncTask(remoteClient);
+                                if (ssl.CanRead)
+                                {
+                                    if (ssl.CanWrite)
+                                    {
+                                        if (ssl.IsAuthenticated)
+                                        {
+                                            Events.SSLReadyEvent.Raise(remoteClient, $"Client: {remoteClient} - SSL Initialized Successfully");
+                                            remoteClient._Connection.DisplayConnectedCertInfo();
+                                            await HandleClientAsyncTask(remoteClient);
+                                            return;
+                                        }
+                                    }
+                                }
                             }
-                            else
-                                Console.WriteLine("SSL Init FAILED");
+
+                            Events.SSLFailEvent.Raise(remoteClient, $"Client: {remoteClient} - SSL Failed to Initialize");
+                            return;
+
                         }
                         else
                         {
                             await HandleClientAsyncTask(remoteClient);
+                            return;
                         }
                     }
                     else
                     {
-                        // Drop Client event
-                        if (remoteClient != null)
-                        {
-                            remoteClient.Close();
-                            remoteClient.Dispose();
-                        }
-                        Console.WriteLine($"Invalid Handshake received from cient {remoteClient}");
+                        Events.HandshakeFailedEvent.Raise(remoteClient, $"Client: {remoteClient} - Handshake Failed");
+
+                        remoteClient.Close();
+                        remoteClient.Dispose();
+
+                        Events.ConnectionClosedEvent.Raise(remoteClient, $"Client: {remoteClient} - Server Dropped (Handshake Failed)");
                     }
-                    #endregion
                 }
                 else
                 {
@@ -299,21 +308,25 @@ namespace aiolib
                         readLineTokenSource.Cancel();
                 }
             }
-            catch (OperationCanceledException) 
+            catch (OperationCanceledException err)
             {
                 Console.WriteLine("Canceled await handshake task.");
+                Events.VerboseConnectionExceptionEvent.Raise(remoteClient, $"Client: {remoteClient} - Caused Exception:\n{err}");
             }
             catch (Win32Exception err)
             {
                 Console.WriteLine("Caught Win32Exception in WaitForHandshake - Exception: " + err);
+                Events.VerboseConnectionExceptionEvent.Raise(remoteClient, $"Client: {remoteClient} - Caused Exception:\n{err}");
             }
             catch (IOException err)
             {
                 Console.WriteLine("Caught IOException in WaitForHandshake - Exception: " + err);
+                Events.VerboseConnectionExceptionEvent.Raise(remoteClient, $"Client: {remoteClient} - Caused Exception:\n{err}");
             }
             catch (Exception err)
             {
                 Console.WriteLine("Unhandled exception in WaitForHandshake: " + err);
+                Events.VerboseConnectionExceptionEvent.Raise(remoteClient, $"Client: {remoteClient} - Caused Exception:\n{err}");
                 //throw;
             }
             finally
@@ -324,36 +337,25 @@ namespace aiolib
                     remoteClient.Dispose();
                 }
             }
-            Console.WriteLine("WaitForHandshake completed without crashing");
+            //Console.WriteLine("WaitForHandshake completed without crashing");
         }
-        private async Task HandleClientAsyncTask(RemoteHost remoteClient)
+
+        private async Task HandleClientAsyncTask(Connection remoteClient)
         {
-            if (remoteClient.Reader == null)
-                throw new ConnectionException("WaitForHandshake: ConnectionException - Null reader error.");
-            // Signal a client has connected, passes the connected client to the event.
-            ClientEventsPublisher.connectEvent.Raise(remoteClient);
+            Events.ConnectionReadyEvent.Raise(remoteClient, $"Client: {remoteClient} - Connection Ready");
             try
             {
-                // This is the 'HandleClient loop', Its running in the task created by this.
-                remoteClient.Reading = true;
-                while (remoteClient.ClientSocket.Connected && remoteClient.Reading)
+                remoteClient._Connection.Reading = true;
+                while (remoteClient.IsConnected && remoteClient._Connection.Reading)
                 {
                     // Waits here for data from the client. The thread will work elsewere until data is received.
-                    //var request = await remoteClient.Reader.ReadLineAsync();
+                    string? request = await remoteClient.ReadLineAsync().CancellableTask(remoteClient._Connection.ReaderToken);
 
-                    // Same as above but supports a cancellation token.
-                    var request = await remoteClient.Reader.ReadLineAsync().WaitAsync(remoteClient.ReaderToken).ConfigureAwait(false); // Requires .NET 6
-                    if (remoteClient.ReaderToken.IsCancellationRequested)
-                    {
-                        Console.WriteLine("Read Canceled");
-                        break;
-                    }
-                    
                     if (request != null)
                     {
                         string payload = request;
                         // Signal a client has sent some data, passes the connected client and the entire payload received
-                        ClientEventsPublisher.receiveEvent.Raise(remoteClient, payload);
+                        Events.ReceiveEvent.Raise(remoteClient, payload);
                     }
                     else
                     {
@@ -368,16 +370,14 @@ namespace aiolib
                 var InnerEx = err.InnerException;
                 if (InnerEx == null)
                 {
-                    Console.WriteLine($"Unhandled IOException: {err}");
-                    ClientEventsPublisher.exceptionEvent.Raise(remoteClient, err);
+                    Events.ConnectionExceptionEvent.Raise(remoteClient, $"Client: {remoteClient} - Caused Exception:\n{err}");
                     throw;
                 }
                 else if (InnerEx.GetType() != typeof(SocketException))
                 {
                     if (InnerEx.GetType() != typeof(Win32Exception))
                     {
-                        Console.WriteLine($"Unhandled Inner Exception for IOException: {InnerEx}");
-                        ClientEventsPublisher.exceptionEvent.Raise(remoteClient, InnerEx);
+                        Events.ConnectionExceptionEvent.Raise(remoteClient, $"Client: {remoteClient} - Caused Exception:\n{err}");
                         throw;
                     }
                 }
@@ -389,43 +389,30 @@ namespace aiolib
             catch (Exception err)
             {
                 Console.WriteLine($"Unhandled Exception: {err}");
-                ClientEventsPublisher.exceptionEvent.Raise(remoteClient, err);
+                Events.ConnectionExceptionEvent.Raise(remoteClient, $"Client: {remoteClient} - Caused Exception:\n{err}");
                 throw;
             }
             finally
             {
                 // Raise a disconnect event.
-                ClientEventsPublisher.disconnectEvent.Raise(remoteClient);
-                //Console.WriteLine($"Raised Disconnect Event");
+                Events.ConnectionClosedEvent.Raise(remoteClient, $"Client: {remoteClient} - Connection Closed");
+            
                 // Cleanup the handles and resources now that we are done with them.                
 
-                // Remove the client from the connected clents list.
                 ConnectedClientsLock = true;
-                //Console.WriteLine($"Locked thread object");
                 _ = ConnectedClients.Remove(remoteClient);
-                //Console.WriteLine($"Removed remote client");
                 ConnectedClientsLock = false;
-                //Console.WriteLine($"Unlocked thread object");
 
-                if (remoteClient != null)
-                {
-                    //Console.WriteLine($"remoteClient is not null");
-                    remoteClient.Close();
-                    remoteClient.Dispose();
-                }
-                //remoteClient = null;
+                remoteClient.Close();
+                remoteClient.Dispose();
 
                 Console.WriteLine($"Client Disposed. Remaining clients: {ConnectedClients.Count}");
-
-
-                // Memory Leak Testing
-
-                //GC.Collect();
-                //GC.WaitForPendingFinalizers();
-                //GC.Collect();
             }
-        Console.WriteLine($"HandleClientAsyncTask finished without crashing");
-
+            //Console.WriteLine($"HandleClientAsyncTask finished without crashing");
         }
+
     }
 }
+
+
+

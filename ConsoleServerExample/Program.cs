@@ -23,6 +23,7 @@ namespace StreamServerAsync
         */
 
         // Various simple event callbacks to print whats happening.
+        /*
         static void OnConnectCallback(object sender, ClientEvents.ConnectEvent.ConnectArgs eventArgs)
         {
             Console.WriteLine($"Client {eventArgs.Client.RemoteEndPoint} has connected.");
@@ -43,10 +44,11 @@ namespace StreamServerAsync
                 eventArgs.Client.SendData(":QUESTDATA:<ArbitraryData>");
             }            
         }
-        static void OnExceptionCallback(object sender, ClientEvents.ExceptionEvent.ExceptionEventArgs eventArgs)
-        {
-            Console.WriteLine($"Client {eventArgs.Client.RemoteEndPoint} has caused exception: {eventArgs.Error}");
-        }
+        //static void OnExceptionCallback(object sender, ClientEvents.ExceptionEvent.ExceptionEventArgs eventArgs)
+        //{
+        //    Console.WriteLine($"Client {eventArgs.Client.RemoteEndPoint} has caused exception: {eventArgs.Error}");
+        //}
+        */
 
 
         static void Main(string[] args)
@@ -57,21 +59,27 @@ namespace StreamServerAsync
                 IPAddress ipAddress = IPAddress.Parse("10.0.0.10");
 
                 // Create an instance of the StreamServer
-                aioStreamServer server = new aioStreamServer(port, ipAddress);
+                aioStreamServer server = new aioStreamServer(ipAddress, port);
 
                 // Hook into the OnReceiveEvent and echo back what we received. (Simple echo server in 1 line)
+                server.Events.OnReceive += (sender, eventArgs) =>
+                {
+                    Console.WriteLine(eventArgs.Message);
+                    eventArgs.Connection.SendData(eventArgs.Message);
+                };
+                
+                server.Events.OnConnectionReady += (sender, eventArgs) =>
+                {
+                    Console.WriteLine(eventArgs.Message);
+                    eventArgs.Connection.SendData($"Welcome, {eventArgs.Connection}!");
+                };
+                server.Events.OnConnectionClosed += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+                server.Events.OnException += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+                server.Events.OnListenReady += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+                server.Events.OnListenEnd += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+                server.Events.OnSend += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
 
-                server.ClientEventsPublisher.receiveEvent.OnReceive += (sender, receiveArgs) => receiveArgs.Client.SendData(receiveArgs.Payload);
-
-                server.ClientEventsPublisher.connectEvent.OnConnect += OnConnectCallback;
-                server.ClientEventsPublisher.disconnectEvent.OnDisconnect += OnDisconnectCallback;
-                server.ClientEventsPublisher.receiveEvent.OnReceive += OnReceiveCallback;
-                server.ClientEventsPublisher.exceptionEvent.OnException += OnExceptionCallback;
-
-                // server.ReceiveEventPublisher.OnReceive += GUICallback;
-
-                // Start the server. Note: this is asyncronous, the lack of await here allows the thread to continue to the writeLine below while also processing clients.
-                server.Run();
+                server.StartListening();
 
                 Console.WriteLine("Echo server is now running  on port " + port);
                 Console.WriteLine("Hit <enter> to stop service\n");
@@ -79,7 +87,7 @@ namespace StreamServerAsync
                 // This is the long running task that prevents the console app from closing. The thread chills here while asyncronously processing clients.
                 Console.ReadLine();
 
-                server.Stop();
+                //server.Stop();
             }
             catch (Exception ex)
             {

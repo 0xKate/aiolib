@@ -23,53 +23,48 @@ namespace TestServerUI
         internal Controller()
         {
             worker = new BackgroundWorker();
-            StreamServer = new aioStreamServer(ServerPort, ServerIP);
-            StreamServer.ClientEventsPublisher.connectEvent.OnConnect += OnConnectCallback;
-            StreamServer.ClientEventsPublisher.disconnectEvent.OnDisconnect += OnDisconnectCallback;
-            StreamServer.ClientEventsPublisher.receiveEvent.OnReceive += OnReceiveCallback;
-            StreamServer.ClientEventsPublisher.exceptionEvent.OnException += OnExceptionCallback;
-            //StreamServer.ClientEventsPublisher.receiveEvent.OnReceive += (sender, receiveArgs) => receiveArgs.Client.SendData("Echo: " + receiveArgs.Payload);
-            StreamServer.ignoreHandshake = false;
+            StreamServer = new aioStreamServer(ServerIP, ServerPort);
             BindingOperations.EnableCollectionSynchronization(StreamServer.ConnectedClients, StreamServer.ConnectedClientsLock);
 
-            worker.DoWork += worker_DoWork;
+            StreamServer.Events.OnReceive += (sender, eventArgs) =>
+            {
+                Console.WriteLine(eventArgs.Message);
+                eventArgs.Connection.SendData(eventArgs.Message);
+            };
+
+            StreamServer.Events.OnConnectionReady += (sender, eventArgs) =>
+            {
+                Console.WriteLine(eventArgs.Message);
+                eventArgs.Connection.SendData($"Welcome, {eventArgs.Connection}!");
+            };
+            StreamServer.Events.OnAwaitAccept += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnConnectionClosed += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnException += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnListenReady += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnListenEnd += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnSend += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnConnectionException += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnSSLFail += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnHandshakeComplete += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnHandshakeFailed += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnHandshakeReceived += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnHandshakePending += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnSSLReady += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnAwaitRecieve += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnVerboseConnectionException += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+
+
+
+
+            //worker.DoWork += worker_DoWork;
             //worker.RunWorkerCompleted += worker_RunWorkerCompleted;
         }
 
+
         internal void RunServer()
         {
-            Task ServerTask = StreamServer.Run();
-            //worker.RunWorkerAsync();
+            StreamServer.Run();
         }
-
-        private async void worker_DoWork(object sender, DoWorkEventArgs e)
-        {
-            Console.WriteLine("Background worker starting...");
-            await StreamServer.Run();
-            Console.WriteLine("StreamServer.Run() ended");
-        }
-        private void worker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
-        {
-            Console.WriteLine("Background worker ended.");
-        }
-        private void OnConnectCallback(object sender, ClientEvents.ConnectEvent.ConnectArgs eventArgs)
-        {
-            eventArgs.Client.SendData($"Welcome {eventArgs.Client}");
-            Console.WriteLine($"Client {eventArgs.Client.RemoteEndPoint} has connected.");
-        }
-        private void OnDisconnectCallback(object sender, ClientEvents.DisconnectEvent.DisconnectArgs eventArgs)
-        {
-            Console.WriteLine($"Client {eventArgs.Client.RemoteEndPoint} has disconnected.");
-        }
-        private void OnReceiveCallback(object sender, ClientEvents.ReceiveEvent.ReceiveEventArgs eventArgs)
-        {
-            Console.WriteLine($"Client {eventArgs.Client.RemoteEndPoint} has sent data: {eventArgs.Payload}");
-        }
-        private void OnExceptionCallback(object sender, ClientEvents.ExceptionEvent.ExceptionEventArgs eventArgs)
-        {
-            Console.WriteLine($"Client {eventArgs.Client.RemoteEndPoint} has caused exception: {eventArgs.Error}");
-        }
-
     }
 }
 

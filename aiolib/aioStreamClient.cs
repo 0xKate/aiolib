@@ -4,33 +4,13 @@
 // This program is published under a GPLv2 license
 // https://github.com/0xKate/aiolib/blob/master/LICENSE
 
-using System.Collections.ObjectModel;
 using System.Net;
 using System.Net.Security;
-using System.Net.Sockets;
-
 
 namespace aiolib
 {
     public class aioStreamClient
     {
-        // Server awaits for TCP init
-        // Client initiatates TCP Connection (SYN)
-        // Server socket responds (SYN-ACK)
-        // Client socket repsonds (ACK)
-
-        // TcpSocket is now open
-
-        // Server is awaiting for handshake (Does not notify client)
-        // Client sends handshake
-        // Client awaits final handshake within 5 seconds
-        // Server verifies and responds if verified
-
-        // Handshake has completed
-
-        // Server awaits for SSL init
-        // Client validates the server and has its callback check the certificate
-        // Server does not validate the client but checks the SSL stream to validate security
         public ConnectionEvent TcpInitdEvent = new();
         public ConnectionEvent SslInitdEvent = new();
         public ConnectionEvent RecvEvent = new();
@@ -40,8 +20,6 @@ namespace aiolib
         public ConnectionEvent ConnClosedEvent = new();
         public ConnectionEvent ConnErrorEvent = new();
         public ConnectionEvent ConnReadyEvent = new();
-        //public ObservableCollection<Connection> Connections { get { return _Connections; } private set { _Connections = value; } }
-        //internal ObservableCollection<Connection> _Connections = new ObservableCollection<Connection>();
         public bool EnableSSL { get; set; }
         public Connection? ServerConnection;
         internal int Port { get; }
@@ -63,6 +41,9 @@ namespace aiolib
             if (connection != null && connection.IsConnected)
             {
                 this.ServerConnection = connection;
+
+                connection.SendEvent.OnEvent += (sender, eventArgs) => this.SendEvent.Raise(eventArgs.Connection, eventArgs.Message);
+
                 this.ConnReadyEvent.Raise(connection, $"Connection ready with host: {connection.RemoteEndPoint}");
                 await this.ReceiveLoopAsync();
             }
@@ -126,14 +107,15 @@ namespace aiolib
             {
                 if (connection.IsConnected)
                 {
+                    //Console.WriteLine("Connecting to host: " + HostName);
                     // (Layer 4) TCP Connection Established                 
                     this.TcpInitdEvent.Raise(connection, $"Tcp connection initialized with host: {connection.RemoteEndPoint}");
                     // (Layer 7) Begin Handshake
                     string digest = await connection._Connection.GetClientDigest(serverSide: false);
-                    Task SendTask = connection.SendDataAsync(digest);
-                    Task<Tuple<bool, string?>> recvTask = connection.WaitForDataAsync(digest);
-                    await SendTask;
-                    Tuple<bool, string?> recv = await recvTask;
+                    Task SendTask = connection.SendDataAsync(digest); // Process the send data in a new task
+                    Task<Tuple<bool, string?>> recvTask = connection.WaitForDataAsync(digest); // Wait for the handshake in a new task
+                    await SendTask; // Wait for the send to complete in this task now
+                    Tuple<bool, string?> recv = await recvTask; // Finish waiting in this task now, use the result
                     if (recv.Item1) // True if the data we got back was the digest
                     {
                         // (Layer 7) Handshake complete
@@ -142,16 +124,18 @@ namespace aiolib
                         // (Layer 5 & 6 Upgrade) SSL Initializing
                         if (this.EnableSSL)
                         {
+                            IPAddress? ip = connection._Connection.GetIPV4Address();
+                            if (ip == null)
+                                throw new ConnectionException("ConnectToHostAsync: ConnectionException - Null IP Exception");
+
                             SslStream? secureConnection = await connection._Connection.SSLUpgradeAsClientAsync(new IPHostEntry()
                             {
                                 HostName = this.HostName,
-                                AddressList = new IPAddress[] { connection._Connection.GetIPV4Address() }
+                                AddressList = new IPAddress[] { ip }
                             });
 
                             if (secureConnection != null)
-                            {
-                                //this._Connections.Add(connection);
-                                // (Layer 5 & 6 Upgrade) SSL Upgrade complete
+                            {   // (Layer 5 & 6 Upgrade) SSL Upgrade complete
                                 this.SslInitdEvent.Raise(connection, $"SSL Initialized with host: {connection.RemoteEndPoint}");
                                 return connection;
                             }
@@ -160,9 +144,7 @@ namespace aiolib
                             return null;
                         }
                         else // Dont upgrade to SSL
-                        {
                             return connection;
-                        }
                     }
                     else // Received data other than handshake
                         this.ConnErrorEvent.Raise(connection, $"Handshake Error with host {connection.RemoteEndPoint}: Received data other than handshake during connection initialization.");
@@ -184,136 +166,4 @@ namespace aiolib
         }
     }
 }
-
-    /// -------- OLD CODE ------------
-
-    /*
-    public class ReceiveEventArgs : EventArgs
-    {
-        public TcpClient RemoteSocket { get; set; }
-        public string Payload { get; set; }
-
-        public ReceiveEventArgs(TcpClient remoteSocket, string payload)
-        {
-            this.RemoteSocket = remoteSocket;
-            this.Payload = payload;
-        }
-        private async Task SendDataAsync(string data)
-        {
-            NetworkStream networkStream = this.RemoteSocket.GetStream();
-            StreamWriter writer = new StreamWriter(networkStream);
-            writer.AutoFlush = true;
-            await writer.WriteLineAsync(data);
-        }
-        public void SendResponse(string message)
-        {
-            Task SendTask = SendDataAsync(message);
-        }
-    }
-
-    public class ReceiveEvent
-    {
-        public event EventHandler<ReceiveEventArgs> OnReceive = delegate { };
-
-        public void Raise(TcpClient remoteSocket, string payload)
-        {
-            ReceiveEventArgs eventArgs = new ReceiveEventArgs(remoteSocket, payload);
-            List<Exception> exceptions = new List<Exception>();
-            foreach (Delegate handler in OnReceive.GetInvocationList())
-            {
-                try
-                {
-                    handler.DynamicInvoke(this, eventArgs);
-                }
-                catch (Exception e)
-                {
-                    exceptions.Add(e);
-                }
-            }
-
-            if (exceptions.Any())
-            {
-                throw new AggregateException(exceptions);
-            }
-        }
-    }
-
-    public class aioStreamClient__OLD
-    {
-        public ReceiveEvent ReceiveEventPublisher;
-        private bool SSLEnabled = true;
-        private int port;
-        private IPAddress ipAddress;
-        private TcpClient remoteSocket;
-        private NetworkStream networkStream;
-        private string remoteEndPoint;
-        private IPEndPoint localEndPoint;
-        public aioStreamClient__OLD(int port, IPAddress ipAddress)
-        {
-            this.port = port;
-            this.ipAddress = ipAddress;
-
-            ReceiveEventPublisher = new ReceiveEvent();
-
-            remoteSocket = new TcpClient(this.ipAddress.ToString(), this.port);
-            remoteEndPoint = remoteSocket.Client.RemoteEndPoint.ToString();
-            localEndPoint = (IPEndPoint)remoteSocket.Client.LocalEndPoint;
-            networkStream = remoteSocket.GetStream();
-        }
-        public void Run()
-        {
-            if (remoteSocket.Connected)
-            {
-                Console.WriteLine("Connected to " + remoteEndPoint);
-                Task ReceiveLoopTask = ReceiveLoopAsync();
-                Task HandshakeTask = SendHandshake();
-                Task SendDataTask = SendDataAsync("Hello from " + localEndPoint);
-            }
-        }
-
-        public async Task SendHandshake()
-        {
-            RemoteHost remoteClient = new RemoteHost(remoteSocket);
-            string digest = await remoteClient.GetClientDigest(false);
-            Console.WriteLine(digest);
-            await SendDataAsync(digest);
-        }
-
-        public async Task SendDataAsync(string data)
-        {
-            StreamWriter writer = new StreamWriter(networkStream);
-            writer.AutoFlush = true;
-            await writer.WriteLineAsync(data);
-        }
-
-        public async Task ReceiveLoopAsync()
-        {
-            try
-            {
-                StreamReader reader = new StreamReader(networkStream);
-                while (true)
-                {
-                    string request = await reader.ReadLineAsync();
-                    if (request != null)
-                    {
-                        Console.WriteLine($"Received data from server {remoteEndPoint}: " + request);
-                        this.ReceiveEventPublisher.Raise(this.remoteSocket, request);
-                    }
-                    else
-                        break; // Client closed connection
-                }
-                remoteSocket.Close();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-                if (remoteSocket.Connected)
-                    remoteSocket.Close();
-            }
-        }
-
-    }
-}
-*/
-
 

@@ -15,6 +15,29 @@ using System.Threading.Tasks;
 
 namespace aiolib
 {
+    public class GenericEventArgs<T> : EventArgs
+    {
+        public T? EventObject;
+        public String? EventMessage;
+        public GenericEventArgs(T? EventObject, string? EventMessage = null)
+        {
+            this.EventObject = EventObject;
+            this.EventMessage = EventMessage;
+        }
+    }
+    public class GenericEvent<T>
+    {
+        public event EventHandler<GenericEventArgs<T>> OnEvent;
+        public void Raise(T? EventObject, string? EventMessage = null)
+        {
+            OnEventRaised(new GenericEventArgs<T>(EventObject, EventMessage));
+        }
+        protected virtual void OnEventRaised(GenericEventArgs<T> e)
+        {
+            OnEvent?.Invoke(this, e);
+        }
+    }
+
 
     public static class aioExtensions
     {

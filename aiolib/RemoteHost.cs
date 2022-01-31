@@ -17,22 +17,25 @@ namespace aiolib
     /// A TcpClient wrapper, this is essentially how the server sees and interacts with its clients.
     public class RemoteHost : IDisposable
     {
-        /// <summary>A reference to the underlying <typeparamref name="TcpClient"/></summary>>
+        /// <summary>A reference to the underlying <typeparamref  cref="TcpClient"/></summary>>
         internal TcpClient ClientSocket { get; }
         ///<summary> The remote EndPoint. Can be converted to string to represent the remote connection as  IP:port .</summary>
         public IPEndPoint? RemoteEndPoint { get; }
-        /// <summary>An <typeparamref name="IPHostEntry"/> that contains the IP address and hostname of the remote socket.</summary>>
+        /// <summary>An <typeparamref cref="IPHostEntry"/> that contains the IP address and hostname of the remote socket.</summary>>
         public IPHostEntry? RemoteHostname { get; }
         /// <summary>Returns true if the socket is still connected.</summary>>
         public bool IsConnected { get { return this.ClientSocket.Connected; } }
         #region Stream
-        /// <summary>If connection is using SSL this will return a <typeparamref name="SslStream"/> otherwise it will return a <typeparamref name="NetworkStream"/>.</summary>>
-        public object? NetStream 
+        /// <summary>If connection is using SSL this will return a <typeparamref cref="SslStream"/> otherwise it will return a <typeparamref cref="NetworkStream"/>.</summary>>
+        public object NetStream 
         {
             get
             {
                 if (this._connectionUpgraded)
-                    return _SSLStream;
+                    if (_SSLStream != null)
+                        return _SSLStream;
+                    else
+                        throw new ApplicationException("Attempted to use NetStream but it was null!");
                 else
                     return _Stream;
             }
@@ -44,12 +47,15 @@ namespace aiolib
         /// <summary>
         /// A reference to the StreamReader. This is a string based stream that handles the auto-conversion between strings, bytes, and network transport. This property will return the SSLReader if the connection has been upgraded.
         /// </summary>
-        public StreamReader? Reader
+        public StreamReader Reader
         {
             get
             {
                 if (this._connectionUpgraded)
-                    return _SSLReader;
+                    if (_SSLReader != null)
+                        return _SSLReader;
+                    else
+                        throw new ApplicationException("Attempted to use Reader but it was null!");
                 else
                     return _Reader;
             }
@@ -61,12 +67,15 @@ namespace aiolib
         /// <summary>
         /// A reference to the StreamWriter. This is a string based stream that handles the auto-conversion between strings, bytes, and network transport.  This property will return the SSLWriter if the connection has been upgraded.
         /// </summary>
-        public StreamWriter? Writer
+        public StreamWriter Writer
         {
             get
             {
                 if (this._connectionUpgraded)
-                    return _SSLWriter;
+                    if (_SSLWriter != null)
+                        return _SSLWriter;
+                    else
+                        throw new ApplicationException("Attempted to use NetStream but it was null!");
                 else
                     return _Writer;
             }
@@ -85,7 +94,6 @@ namespace aiolib
         /// <summary>Returns true if the connection has been upgraded to SSL.</summary>
         public bool ConnectionUpgraded { get { return _connectionUpgraded; } }
         private bool _connectionUpgraded = false;
-        private bool _sslCappable;
         /// <summary>
         /// A container/wrapper for TcpClient and multiple handles to Unmanaged resources. As well as high level functions for interacting with the remote client and data stream.
         /// </summary>
@@ -94,19 +102,14 @@ namespace aiolib
         /// <exception cref="ApplicationException"> Will throw an exception if we fail to obtain the EndPoint from the TcpClient.</exception>
         public RemoteHost(TcpClient tcpClient, IPHostEntry? Hostname=null)
         {
-            if (Hostname != null)
-                this._sslCappable = true;
-            else
-                this._sslCappable = false;
-
             this.ClientSocket = tcpClient;
-            this.RemoteHostname = Hostname;            
+            this.RemoteHostname = Hostname;
 
-            var ep = (IPEndPoint?)tcpClient.Client.RemoteEndPoint;
-            if (ep == null)
+            RemoteEndPoint = (IPEndPoint?)tcpClient.Client.RemoteEndPoint;
+            if (RemoteEndPoint == null)
                 throw new ApplicationException("Tried to create a RemoteHost, but the underlying socket has closed.");
-            RemoteEndPoint = ep;
 
+            // Used to cancel pending awaited reads to more gracefully cleanup tasks
             ReaderTokenSource = new CancellationTokenSource();
             ReaderToken = ReaderTokenSource.Token;
 
@@ -122,6 +125,8 @@ namespace aiolib
             // AutoFlush causes the streamWritter buffer to instantly flush, instead of waiting for a manual flush.
             _Writer.AutoFlush = true;
         }
+        internal string RemoteCertHash = "A1216C75095E4A732C3DCC2EBCA508456C926FF7";
+        
         /// <summary>Get the IPAddress of the RemoteHost</summary>
         public IPAddress? GetIPV4Address()
         {
@@ -138,8 +143,8 @@ namespace aiolib
         internal async Task SendDataAsync(string data)
         {
             // Write the data to the socket (remote client), but do so in an asyncronous manner so other tasks may run while the client receives it.
-            if (Writer != null)
-                await Writer.WriteLineAsync(data);
+            await Writer.WriteLineAsync(data);
+            
         }
         /// <summary>
         /// The recomended method for sending data to the client. A fire-and-forget method that Can be used from any enviroment.
@@ -149,8 +154,7 @@ namespace aiolib
         {
             _ = SendDataAsync(message);
         }
-
-        private void DisplayConnectedCertInfo()
+        internal void DisplayConnectedCertInfo()
         {
             if (this._SSLStream != null)
                 if (this._SSLStream.IsAuthenticated)
@@ -158,18 +162,24 @@ namespace aiolib
                     X509Certificate? remoteCertificate = this._SSLStream.RemoteCertificate;
                     if (remoteCertificate != null)
                     {
-                        Console.WriteLine("Remote cert was issued to {0} and is valid from {1} until {2}.",
+                        Console.WriteLine("Remote cert was issued to {0} by {1} and is valid from {2} until {3}. Hash: {4} Alg: {5}",
                             remoteCertificate.Subject,
+                            remoteCertificate.Issuer,
                             remoteCertificate.GetEffectiveDateString(),
-                            remoteCertificate.GetExpirationDateString());
+                            remoteCertificate.GetExpirationDateString(),
+                            remoteCertificate.GetCertHashString(),
+                            remoteCertificate.GetKeyAlgorithm());
                     }
                     X509Certificate? localCertificate = this._SSLStream.LocalCertificate;
                     if (localCertificate != null)
                     {
-                        Console.WriteLine("Local cert was issued to {0} and is valid from {1} until {2}.",
+                        Console.WriteLine("Local cert was issued to {0} by {1} and is valid from {2} until {3}. Hash: {4} Alg: {5}",
                             localCertificate.Subject,
+                            localCertificate.Issuer,
                             localCertificate.GetEffectiveDateString(),
-                            localCertificate.GetExpirationDateString());
+                            localCertificate.GetExpirationDateString(),
+                            localCertificate.GetCertHashString(),                            
+                            localCertificate.GetKeyAlgorithm());
                     }
                     Console.WriteLine("Certificate revocation list checked: {0}", this._SSLStream.CheckCertRevocationStatus);
                 }
@@ -183,7 +193,31 @@ namespace aiolib
                 return true;
             else // Do not allow this client to communicate with unauthenticated servers.
             {
-                Console.WriteLine("Certificate error: {0}", sslPolicyErrors);         
+                Console.WriteLine("Certificate error: {0}", sslPolicyErrors);
+                Console.WriteLine($"Subject: {certificate.Subject} Issuer: {certificate.Issuer}");
+
+                // Self-Signed Certificate:
+                string hash = certificate.GetCertHashString();
+
+                if (certificate.Subject == certificate.Issuer)
+                {
+                    // Self-Signed Certificate Override
+                    if (hash == this.RemoteCertHash)
+                    {                        
+                        Console.WriteLine($"Overriding cert error(s) '{sslPolicyErrors}' and accepting self-signed certificate with hash: " + hash);
+                        return true;
+                    }
+
+                    Console.WriteLine($"Unknown Self-Signed certificate detected!\n  - - SHA1 HASH - -\n'{hash}'\n  - - END SHA1 HASH - -\n");
+                    Console.Write("Do you want to continue anyway? (Y/N): ");
+                    var userInput = Console.ReadLine();
+                    if (userInput.ToLower().StartsWith('y'))
+                    {
+                        return true;
+                    }
+                    else
+                        Console.WriteLine(userInput);
+                }
                 return false;
             }
         }
@@ -335,7 +369,8 @@ namespace aiolib
             {
                 ReaderTokenSource.Cancel();
 
-                _SSLReader.DiscardBufferedData();
+                if (_SSLReader != null)
+                    _SSLReader.DiscardBufferedData();
                 _Reader.DiscardBufferedData();
 
                 if (_SSLReader != null)
@@ -362,9 +397,12 @@ namespace aiolib
             if (_disposed)
                 return;
 
-            await _SSLWriter.DisposeAsync();
-            await _Writer.DisposeAsync();
-            await _SSLStream.DisposeAsync();
+            if (_SSLWriter != null)
+                await _SSLWriter.DisposeAsync();
+            if (_SSLWriter != null)
+                await _Writer.DisposeAsync();
+            if (_SSLStream != null)
+                await _SSLStream.DisposeAsync();
             await _Stream.DisposeAsync();            
             Dispose(true);
         }
