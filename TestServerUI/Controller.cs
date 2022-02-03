@@ -18,6 +18,7 @@ namespace TestServerUI
         public IPAddress ServerIP = IPAddress.Parse("10.0.0.10");
         public aioStreamServer StreamServer;
         private BackgroundWorker worker;
+        public ObservableCollection<String> LogList = new ObservableCollection<String>();
 
 
         internal Controller()
@@ -48,16 +49,11 @@ namespace TestServerUI
             StreamServer.Events.OnHandshakeComplete += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
             StreamServer.Events.OnHandshakeFailed += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
             StreamServer.Events.OnHandshakeReceived += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
-            StreamServer.Events.OnHandshakePending += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnHandshakeBegin += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+            StreamServer.Events.OnHandshakeWait += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
             StreamServer.Events.OnSSLReady += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
             StreamServer.Events.OnAwaitRecieve += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
             StreamServer.Events.OnVerboseConnectionException += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
-
-
-
-
-            //worker.DoWork += worker_DoWork;
-            //worker.RunWorkerCompleted += worker_RunWorkerCompleted;
         }
 
 

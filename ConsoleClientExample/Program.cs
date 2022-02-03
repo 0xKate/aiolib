@@ -39,17 +39,17 @@ namespace ConsoleProgram
                 bool running = true;
 
                 aioStreamClient client = new aioStreamClient(port, hostname);
-                client.ConnReadyEvent.OnEvent += (sender, eventArgs) => eventArgs.Connection.SendData($"Hello from {client.ServerConnection.LocalEndPoint}");
-                client.RecvEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Server: Received data <{eventArgs.Message}' from server <{client.ServerConnection}>");
-                client.ConnReadyEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Client: Connection with <{client.ServerConnection}> is ready.");
-                client.ConnClosedEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Client: Connection with <{client.ServerConnection}> has closed.");
-                client.ConnErrorEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Client: Connection with <{client.ServerConnection}> has errors ready.");
-                client.SslInitdEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Client: SSL Initialized with Server <{eventArgs.Connection}>");
-                client.RecvWaitEvent.OnEvent += (sender, eventArgs) => Console.WriteLine($"Client: Waiting to receive with Server <{eventArgs.Connection}>");
-                client.SendEvent.OnEvent += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
+                client.Events.OnConnectionReady += (sender, eventArgs) => eventArgs.Connection.SendData($"Hello from {client.ServerConnection.LocalEndPoint}");
+                client.Events.OnReceive += (sender, eventArgs) => Console.WriteLine($"Server: Received data <{eventArgs.Message}' from server <{client.ServerConnection}>");
+                client.Events.OnConnectionReady += (sender, eventArgs) => Console.WriteLine($"Client: Connection with <{client.ServerConnection}> is ready.");
+                client.Events.OnConnectionClosed += (sender, eventArgs) => Console.WriteLine($"Client: Connection with <{client.ServerConnection}> has closed.");
+                client.Events.OnConnectionException += (sender, eventArgs) => Console.WriteLine($"Client: Connection with <{client.ServerConnection}> has errors ready.");
+                client.Events.OnSSLReady += (sender, eventArgs) => Console.WriteLine($"Client: SSL Initialized with Server <{eventArgs.Connection}>");
+                client.Events.OnAwaitRecieve += (sender, eventArgs) => Console.WriteLine($"Client: Waiting to receive with Server <{eventArgs.Connection}>");
+                client.Events.OnSend += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
                 //client.SslInitdEvent.OnEvent += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
                 //client.TcpInitdEvent.OnEvent += (sender, eventArgs) => Console.WriteLine(eventArgs.Message);
-                client.HandshakeInitdEvent.OnEvent += (sender, eventArgs) => Console.WriteLine("Client: " + eventArgs.Message);
+                client.Events.OnHandshakeComplete += (sender, eventArgs) => Console.WriteLine("Client: " + eventArgs.Message);
                 client.Run();
 
                 while (running)
