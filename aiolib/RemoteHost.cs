@@ -125,7 +125,7 @@ namespace aiolib
             // AutoFlush causes the streamWritter buffer to instantly flush, instead of waiting for a manual flush.
             _Writer.AutoFlush = true;
         }
-        internal string RemoteCertHash = "A1216C75095E4A732C3DCC2EBCA508456C926FF7";
+        internal string RemoteCertHash = "A1216C75095E4A732C3DCC2EBCA508456C926FF7"; // TODO Move to 
         
         /// <summary>Get the IPAddress of the RemoteHost</summary>
         public IPAddress? GetIPV4Address()
@@ -193,30 +193,20 @@ namespace aiolib
                 return true;
             else // Do not allow this client to communicate with unauthenticated servers.
             {
-                Console.WriteLine("Certificate error: {0}", sslPolicyErrors);
-                Console.WriteLine($"Subject: {certificate.Subject} Issuer: {certificate.Issuer}");
+                Console.WriteLine("Certificate error: {0}", sslPolicyErrors);               
 
                 // Self-Signed Certificate:
-                string hash = certificate.GetCertHashString();
-
                 if (certificate.Subject == certificate.Issuer)
                 {
+                    string hash = certificate.GetCertHashString();
                     // Self-Signed Certificate Override
                     if (hash == this.RemoteCertHash)
                     {                        
                         Console.WriteLine($"Overriding cert error(s) '{sslPolicyErrors}' and accepting self-signed certificate with hash: " + hash);
                         return true;
                     }
-
+                    Console.WriteLine($"Subject: {certificate.Subject} Issuer: {certificate.Issuer}");
                     Console.WriteLine($"Unknown Self-Signed certificate detected!\n  - - SHA1 HASH - -\n'{hash}'\n  - - END SHA1 HASH - -\n");
-                    Console.Write("Do you want to continue anyway? (Y/N): ");
-                    var userInput = Console.ReadLine();
-                    if (userInput.ToLower().StartsWith('y'))
-                    {
-                        return true;
-                    }
-                    else
-                        Console.WriteLine(userInput);
                 }
                 return false;
             }
