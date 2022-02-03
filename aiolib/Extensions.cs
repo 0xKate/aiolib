@@ -12,6 +12,8 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
+using System.Xml.Serialization;
 
 namespace aiolib
 {
@@ -38,6 +40,45 @@ namespace aiolib
         }
     }
 
+    public class XMLSerializer<T>
+    {
+        public Type[]? AdditionalTypes;
+        public XMLSerializer(Type[]? AdditionalTypes = null)
+        {
+            this.AdditionalTypes = AdditionalTypes;
+        }
+
+        public string Serialize(T Obj)
+        {
+            using (StringWriter buffer = new StringWriter())
+            {
+                XmlSerializer xmlSerializer;
+                if (this.AdditionalTypes != null)
+                    xmlSerializer = new XmlSerializer(typeof(T), this.AdditionalTypes);
+                else
+                    xmlSerializer = new XmlSerializer(typeof(T));
+                xmlSerializer.Serialize(buffer, Obj);
+                return buffer.ToString();
+            }
+        }
+
+        public string PrettyPrintXML(string xmlString)
+        {
+            return XDocument.Parse(xmlString).ToString();
+        }
+
+        public T? Deserialize(string xmlString)
+        {
+            byte[] xmlbytes = Encoding.UTF8.GetBytes(xmlString);
+            using (MemoryStream xmlstream = new MemoryStream(xmlbytes))
+            using (StreamReader xmlReader = new StreamReader(xmlstream))
+            {
+                XmlSerializer serializer = new XmlSerializer(typeof(T), this.AdditionalTypes);
+                T? DeserializedObject = (T?)serializer.Deserialize(xmlReader);
+                return DeserializedObject;
+            }
+        }
+    }
 
     public static class aioExtensions
     {
@@ -108,6 +149,8 @@ namespace aiolib
 
     public static class Crypto
     {
+
+
         public static void MakeCert(string certFilename, string keyFilename, string subjectName, string ipAddress)
         {
             const string CRT_HEADER = "-----BEGIN CERTIFICATE-----\n";
