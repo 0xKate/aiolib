@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace aiolib
 {
-    public class ServerEvents
+    public class aioEvents
     {
         // Register Event Publishers
         // Only allow publicly subscribing
@@ -44,6 +44,14 @@ namespace aiolib
             remove { SSLFailEvent.OnEvent -= value; }
         }
 
+        // OnSSLFail
+        internal ConnectionEvent SSLBeginEvent = new();
+        public event EventHandler<ConnectionEventArgs> OnSSLBegin
+        {
+            add { SSLBeginEvent.OnEvent += value; }
+            remove { SSLBeginEvent.OnEvent -= value; }
+        }
+
         // OnRecieve
         internal ConnectionEvent ReceiveEvent = new();
         public event EventHandler<ConnectionEventArgs> OnReceive
@@ -68,12 +76,20 @@ namespace aiolib
             remove { SendEvent.OnEvent -= value; }
         }
 
-        // OnHandshakePending
+        // OnHandshakeBegin
         internal ConnectionEvent HandshakeBeginEvent = new();
-        public event EventHandler<ConnectionEventArgs> OnHandshakePending
+        public event EventHandler<ConnectionEventArgs> OnHandshakeBegin
         {
             add { HandshakeBeginEvent.OnEvent += value; }
             remove { HandshakeBeginEvent.OnEvent -= value; }
+        }
+
+        // OnHandshakeWait
+        internal ConnectionEvent HandshakeWaitEvent = new();
+        public event EventHandler<ConnectionEventArgs> OnHandshakeWait
+        {
+            add { HandshakeWaitEvent.OnEvent += value; }
+            remove { HandshakeWaitEvent.OnEvent -= value; }
         }
 
         // OnHandshakeReceived

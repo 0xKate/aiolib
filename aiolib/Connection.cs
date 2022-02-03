@@ -19,9 +19,9 @@ namespace aiolib
     }
     public class ConnectionEventArgs : EventArgs
     {
-        public Connection? Connection;
+        public Connection Connection;
         public String? Message;
-        public ConnectionEventArgs(Connection? Connection, string? Message = null)
+        public ConnectionEventArgs(Connection Connection, string? Message = null)
         {
             this.Connection = Connection;
             this.Message = Message;
@@ -30,7 +30,7 @@ namespace aiolib
     public class ConnectionEvent
     {
         public event EventHandler<ConnectionEventArgs> OnEvent;
-        public void Raise(Connection? connection, string? message = null)
+        public void Raise(Connection connection, string? message = null)
         {
             OnEventRaised(new ConnectionEventArgs(connection, message));
         }
@@ -139,7 +139,7 @@ namespace aiolib
             if (!_blockSend)
             {
                 this._Connection.SendData(data);
-                SendEvent.Raise(this, $"Client: {this} - Sent Data: '{data}'");
+                SendEvent.Raise(this, data);
             }
         }
         public void Close()

@@ -69,7 +69,7 @@ namespace aiolib
         private Boolean ServerListening { get; set; }
         private Boolean _Started = false;
         private Boolean _Stopped = true;
-        public ServerEvents Events { get; }
+        public aioEvents Events { get; }
         #endregion
         public aioStreamServer(IPAddress listenIp, Int32 listenPort, Boolean ignoreHandshake = false, Boolean enableSSL = true)
         {
@@ -77,7 +77,7 @@ namespace aiolib
             this.ServerListener = new TcpListener(listenIp, listenPort);
             this.Blacklist = new List<IPAddress>();
             this.ConnectedClients = new ObservableCollection<Connection>();
-            this.Events = new ServerEvents();
+            this.Events = new aioEvents();
 
             // Initializer arguments
             this.ListenPort = listenPort;
@@ -131,6 +131,11 @@ namespace aiolib
 
             _Started = false;
         }
+        public void Wait()
+        {
+            if (this.MainTask != null)
+                this.MainTask.Wait();
+        }
         public void Run()
         {
             this.StartListening();
@@ -165,7 +170,8 @@ namespace aiolib
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Failed to start listener: " + ex);
+                Events.ExceptionEvent.Raise(this, "Failed to start listener: " + ex);
+                //Console.WriteLine("Failed to start listener: " + ex);
                 return;
             }
 
@@ -196,7 +202,8 @@ namespace aiolib
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine("Error disposing of unauthorized client!: " + ex.ToString());
+                            Events.ExceptionEvent.Raise(this, "Error disposing of unauthorized client!: " + ex);
+                            //Console.WriteLine("Error disposing of unauthorized client!: " + ex.ToString());
                         }
                         continue;
                     }
@@ -210,7 +217,7 @@ namespace aiolib
                 catch (Exception err)
                 {
                     Console.WriteLine($"Unexpected exception during client initialization: " + err.Message);
-                    Events.ConnectionExceptionEvent.Raise(null, $"Client: null - Caused Exception:\n{err}");
+                    Events.ExceptionEvent.Raise(this, $"Unexpected exception during client initialization: " + err.Message);
                     //throw ex;
                 }
             }
@@ -254,6 +261,7 @@ namespace aiolib
                         // Attempt SSL Upgrade
                         if (EnableSSL)
                         {
+                            Events.SSLBeginEvent.Raise(remoteClient, $"Client: {remoteClient} - Begin SSL Upgrade");
                             if (this.ServerCertificate == null)
                             {
                                 throw new ServerException("SSL Requires an X509Certificate ! - Null certificate error.");
@@ -303,24 +311,25 @@ namespace aiolib
                 }
                 else
                 {
-                    Console.WriteLine($"Handshake timeout from cient {remoteClient}");
+                    Events.HandshakeFailedEvent.Raise(remoteClient, $"Handshake timeout from cient {remoteClient}");
+                    //Console.WriteLine($"Handshake timeout from cient {remoteClient}");
                     if (readLineTokenSource != null)
                         readLineTokenSource.Cancel();
                 }
             }
             catch (OperationCanceledException err)
             {
-                Console.WriteLine("Canceled await handshake task.");
+                //Console.WriteLine("Canceled await handshake task.");
                 Events.VerboseConnectionExceptionEvent.Raise(remoteClient, $"Client: {remoteClient} - Caused Exception:\n{err}");
             }
             catch (Win32Exception err)
             {
-                Console.WriteLine("Caught Win32Exception in WaitForHandshake - Exception: " + err);
+                //Console.WriteLine("Caught Win32Exception in WaitForHandshake - Exception: " + err);
                 Events.VerboseConnectionExceptionEvent.Raise(remoteClient, $"Client: {remoteClient} - Caused Exception:\n{err}");
             }
             catch (IOException err)
             {
-                Console.WriteLine("Caught IOException in WaitForHandshake - Exception: " + err);
+                //Console.WriteLine("Caught IOException in WaitForHandshake - Exception: " + err);
                 Events.VerboseConnectionExceptionEvent.Raise(remoteClient, $"Client: {remoteClient} - Caused Exception:\n{err}");
             }
             catch (Exception err)
