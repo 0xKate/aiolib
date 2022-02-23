@@ -5,6 +5,10 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
+// This Entire File is is courtesy of stackoverflow user backs:
+// https://stackoverflow.com/users/2910943/backs
+// https://meta.stackexchange.com/questions/272956/a-new-code-license-the-mit-this-time-with-attribution-required?cb=1
+
 namespace TestServerUI
 {
     internal static class ConsoleAllocator
