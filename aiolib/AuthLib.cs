@@ -25,6 +25,7 @@ namespace aiolib
 
                         // PBKDF2 (password-based key derivation function)
                         const int Iterations = 300;
+                        https://datatracker.ietf.org/doc/html/rfc2898#section-5.2
                         var keyGenerator = new Rfc2898DeriveBytes(passw_hash, salt, Iterations);                  
                         aes.Key = keyGenerator.GetBytes(aes.KeySize / 8);
 
